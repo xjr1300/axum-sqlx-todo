@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["domain"]
+members = ["domain", "infra"]
 resolver = "3"
 
 [workspace.dependencies]

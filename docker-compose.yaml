@@ -1,10 +1,10 @@
 services:
   db:
     image: postgres:17
-    container_name: task-db
+    container_name: todo_db
     environment:
-      POSTGRES_USER: task
-      POSTGRES_PASSWORD: task
-      POSTGRES_DB: task
+      POSTGRES_USER: todo
+      POSTGRES_PASSWORD: todo-password
+      POSTGRES_DB: todo_db
     ports:
       - "5432:5432"

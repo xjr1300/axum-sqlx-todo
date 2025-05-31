@@ -1,0 +1,8 @@
+[database]
+host = "localhost"
+port = 5432
+user = "todo"
+password = "todo-password"
+database = "todo_db"
+max_connections = 100
+connection_timeout = 15

@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Context as _;
 use config::Config;
 use sqlx::postgres::PgPoolOptions;
+use tokio::net::TcpListener;
 
 use infra::postgres::repositories::create_pg_repositories;
 
@@ -32,7 +33,20 @@ async fn main() -> anyhow::Result<()> {
         .context("Failed to connect to the database")?;
 
     // リポジトリコレクションを作成
-    let repositories = create_pg_repositories(pool.clone());
+    let repositories = create_pg_repositories(pool);
+
+    // ルーターを作成
+    let router = app::routes::create_router(repositories);
+
+    // HTTPサーバーを起動
+    let address = app_settings.http_server.bind_address();
+    let listener = TcpListener::bind(&address)
+        .await
+        .context("Failed to bind to the address for the HTTP server")?;
+    println!("HTTP server is running on {}", address);
+    axum::serve(listener, router)
+        .await
+        .context("Failed to start the HTTP server")?;
 
     Ok(())
 }

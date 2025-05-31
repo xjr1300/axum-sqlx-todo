@@ -5,6 +5,7 @@ use domain::{
     models::{HashedPassword, User, UserId},
     repositories::{UserInput, UserRepository},
 };
+use sqlx::PgTransaction;
 use time::OffsetDateTime;
 
 use super::{PgRepository, commit};
@@ -66,8 +67,7 @@ impl UserRepository for PgUserRepository {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
-        commit(tx).await?;
-        User::try_from(row)
+        user_commit(tx, row).await
     }
 
     /// ユーザーをIDで取得する。
@@ -117,10 +117,7 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(r) => {
-                commit(tx).await?;
-                User::try_from(r)
-            }
+            Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
         }
     }
@@ -147,10 +144,7 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(row) => {
-                commit(tx).await?;
-                User::try_from(row)
-            }
+            Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
         }
     }
@@ -181,10 +175,7 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(row) => {
-                commit(tx).await?;
-                User::try_from(row)
-            }
+            Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
         }
     }
@@ -257,6 +248,11 @@ impl UserRepository for PgUserRepository {
             }
         }
     }
+}
+
+async fn user_commit(tx: PgTransaction<'_>, row: UserRow) -> DomainResult<User> {
+    commit(tx).await?;
+    User::try_from(row)
 }
 
 fn user_not_found<T>(id: UserId) -> DomainResult<T> {

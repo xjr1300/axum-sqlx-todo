@@ -18,6 +18,7 @@ use domain::{
 pub type PgTransaction<'a> = Transaction<'a, Postgres>;
 
 /// PostgreSQLリポジトリ
+#[derive(Clone)]
 pub struct PgRepository<T> {
     pub pool: PgPool,
     pub _marker: PhantomData<T>,
@@ -48,10 +49,11 @@ pub async fn commit(tx: PgTransaction<'_>) -> DomainResult<()> {
         .map_err(|e| DomainError::Repository(e.to_string().into()))
 }
 
+/// PostgreSQLリポジトリコレクション
+pub type PgRepositories = Repositories<PgRepository<User>, PgRepository<Todo>>;
+
 /// PostgreSQLリポジトリコレクションを作成する。
-pub fn create_pg_repositories(
-    pool: PgPool,
-) -> Repositories<PgRepository<User>, PgRepository<Todo>> {
+pub fn create_pg_repositories(pool: PgPool) -> PgRepositories {
     let user_repository = PgUserRepository {
         pool: pool.clone(),
         _marker: PhantomData,

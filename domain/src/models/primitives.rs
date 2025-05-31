@@ -101,10 +101,6 @@ macro_rules! impl_i32_primitive {
     };
 }
 
-/*
-
-*/
-
 #[cfg(test)]
 mod tests {
     use super::*;

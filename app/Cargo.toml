@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 config.workspace = true
+domain = { path = "../domain" }
 infra = { path = "../infra" }
 secrecy.workspace = true
 serde.workspace = true

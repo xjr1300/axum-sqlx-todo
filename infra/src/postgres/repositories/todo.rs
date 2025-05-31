@@ -3,6 +3,7 @@ use domain::{
     models::{Todo, TodoId, TodoStatus, TodoStatusCode, TodoStatusName, User, UserId},
     repositories::{TodoCreate, TodoRepository, TodoUpdate},
 };
+use sqlx::PgTransaction;
 use time::OffsetDateTime;
 
 use super::{PgRepository, commit};
@@ -99,8 +100,7 @@ impl TodoRepository for PgTodoRepository {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
-        commit(tx).await?;
-        Todo::try_from(row)
+        todo_commit(tx, row).await
     }
 
     /// Todoを取得する。
@@ -171,13 +171,8 @@ impl TodoRepository for PgTodoRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(row) => {
-                commit(tx).await?;
-                Todo::try_from(row)
-            }
-            None => Err(DomainError::NotFound(
-                format!("Todo with id {} not found", id).into(),
-            )),
+            Some(row) => todo_commit(tx, row).await,
+            None => todo_not_found(id),
         }
     }
 
@@ -215,13 +210,8 @@ impl TodoRepository for PgTodoRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(row) => {
-                commit(tx).await?;
-                Todo::try_from(row)
-            }
-            None => Err(DomainError::NotFound(
-                format!("Todo with id {} not found", id).into(),
-            )),
+            Some(row) => todo_commit(tx, row).await,
+            None => todo_not_found(id),
         }
     }
 
@@ -260,13 +250,8 @@ impl TodoRepository for PgTodoRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match row {
-            Some(row) => {
-                commit(tx).await?;
-                Todo::try_from(row)
-            }
-            None => Err(DomainError::NotFound(
-                format!("Todo with id {} not found", id).into(),
-            )),
+            Some(row) => todo_commit(tx, row).await,
+            None => todo_not_found(id),
         }
     }
 
@@ -284,15 +269,22 @@ impl TodoRepository for PgTodoRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match query_result.rows_affected() {
-            0 => {
-                return Err(DomainError::NotFound(
-                    format!("Todo with id {} not found", id).into(),
-                ));
-            }
+            0 => return todo_not_found(id),
             _ => {
                 commit(tx).await?;
                 Ok(())
             }
         }
     }
+}
+
+async fn todo_commit(tx: PgTransaction<'_>, row: TodoRow) -> DomainResult<Todo> {
+    commit(tx).await?;
+    Todo::try_from(row)
+}
+
+fn todo_not_found<T>(id: TodoId) -> DomainResult<T> {
+    Err(DomainError::NotFound(
+        format!("Todo with id {} not found", id).into(),
+    ))
 }

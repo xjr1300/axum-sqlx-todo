@@ -7,13 +7,14 @@ pub use user::*;
 /// リポジトリコレクション
 ///
 /// 具象リポジトリをDIして使用する。
-pub struct Repositories<U, T>
+#[derive(Clone)]
+pub struct Repositories<User, Todo>
 where
-    U: UserRepository,
-    T: TodoRepository,
+    User: UserRepository + Clone,
+    Todo: TodoRepository + Clone,
 {
     /// ユーザーリポジトリ
-    pub user_repository: U,
+    pub user_repository: User,
     /// Todoリポジトリ
-    pub todo_repository: T,
+    pub todo_repository: Todo,
 }

@@ -4,13 +4,23 @@ use serde::Deserialize;
 /// アプリケーション設定
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppSettings {
+    /// HTTPサーバー設定
+    pub http_server: HttpServerSettings,
     /// データベース設定
     pub database: DatabaseSettings,
 }
 
+/// HTTPサーバー設定
+#[derive(Debug, Clone, Deserialize)]
+pub struct HttpServerSettings {
+    /// ホスト名
+    pub host: String,
+    /// ポート番号
+    pub port: u16,
+}
+
 /// データベース設定
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename = "database")]
 pub struct DatabaseSettings {
     /// ホスト名
     pub host: String,
@@ -26,6 +36,13 @@ pub struct DatabaseSettings {
     pub max_connections: u32,
     /// 接続タイムアウト（秒）
     pub connection_timeout: u64,
+}
+
+impl HttpServerSettings {
+    /// バインドするアドレス（ホスト名とポート番号）を返す。
+    pub fn bind_address(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
 }
 
 impl DatabaseSettings {

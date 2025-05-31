@@ -8,7 +8,11 @@ use std::marker::PhantomData;
 
 use sqlx::{PgPool, Postgres, Transaction};
 
-use domain::{DomainError, DomainResult};
+use domain::{
+    DomainError, DomainResult,
+    models::{Todo, User},
+    repositories::Repositories,
+};
 
 /// PostgreSQLトランザクション
 pub type PgTransaction<'a> = Transaction<'a, Postgres>;
@@ -42,4 +46,22 @@ pub async fn commit(tx: PgTransaction<'_>) -> DomainResult<()> {
     tx.commit()
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))
+}
+
+/// PostgreSQLリポジトリコレクションを作成する。
+pub fn create_pg_repositories(
+    pool: PgPool,
+) -> Repositories<PgRepository<User>, PgRepository<Todo>> {
+    let user_repository = PgUserRepository {
+        pool: pool.clone(),
+        _marker: PhantomData,
+    };
+    let todo_repository = PgTodoRepository {
+        pool,
+        _marker: PhantomData,
+    };
+    Repositories {
+        user_repository,
+        todo_repository,
+    }
 }

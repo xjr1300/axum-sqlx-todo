@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 config.workspace = true
+infra = { path = "../infra" }
 secrecy.workspace = true
 serde.workspace = true
+sqlx.workspace = true
 tokio.workspace = true

@@ -23,7 +23,7 @@ pub struct DatabaseSettings {
     /// データベース名
     pub database: String,
     /// 最大接続数
-    pub max_connections: u16,
+    pub max_connections: u32,
     /// 接続タイムアウト（秒）
     pub connection_timeout: u64,
 }

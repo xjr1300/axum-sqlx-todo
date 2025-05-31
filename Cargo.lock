@@ -44,8 +44,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config",
+ "infra",
  "secrecy",
  "serde",
+ "sqlx",
  "tokio",
 ]
 

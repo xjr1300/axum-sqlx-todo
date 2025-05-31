@@ -1,0 +1,10 @@
+services:
+  db:
+    image: postgres:17
+    container_name: task-db
+    environment:
+      POSTGRES_USER: task
+      POSTGRES_PASSWORD: task
+      POSTGRES_DB: task
+    ports:
+      - "5432:5432"

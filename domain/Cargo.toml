@@ -1,0 +1,15 @@
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+garde.workspace = true
+secrecy.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

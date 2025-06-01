@@ -15,6 +15,10 @@ pub enum DomainError {
     #[error("{0} is not found")]
     NotFound(Cow<'static, str>),
 
+    /// 認証されていない
+    #[error("{0}")]
+    Unauthorized(Cow<'static, str>),
+
     /// 禁止された操作
     #[error("{0}")]
     Forbidden(Cow<'static, str>),

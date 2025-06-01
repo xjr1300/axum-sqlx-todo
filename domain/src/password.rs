@@ -23,10 +23,10 @@ use settings::PasswordSettings;
 /// ハッシュ化されたパスワード
 pub fn create_hashed_password(
     settings: &PasswordSettings,
-    raw_password: RawPassword,
+    raw_password: &RawPassword,
 ) -> DomainResult<PHCString> {
     // パスワードにペッパーをふりかけ
-    let peppered_password = sprinkle_pepper(&settings.pepper, &raw_password);
+    let peppered_password = sprinkle_pepper(&settings.pepper, raw_password);
     // ソルトを生成
     let salt = SaltString::generate(&mut rand::thread_rng());
     // ハッシュ化パラメーターを設定
@@ -136,7 +136,7 @@ mod tests {
             hash_parallelism: 1,
         };
         let raw_password = RawPassword(SecretString::new("password123!".into()));
-        let hashed_password = create_hashed_password(&settings, raw_password.clone())?;
+        let hashed_password = create_hashed_password(&settings, &raw_password)?;
         assert!(verify_password(
             &raw_password,
             &settings.pepper,

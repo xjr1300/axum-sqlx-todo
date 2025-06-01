@@ -10,7 +10,6 @@ pub struct UserInput {
     pub family_name: FamilyName,
     pub given_name: GivenName,
     pub email: Email,
-    pub active: bool,
 }
 
 #[async_trait::async_trait]

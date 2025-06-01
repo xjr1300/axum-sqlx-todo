@@ -61,7 +61,7 @@ impl UserRepository for PgUserRepository {
             user.given_name.0,
             user.email.0,
             hashed_password.0.expose_secret(),
-            user.active,
+            true,
             None::<OffsetDateTime>,
         )
         .fetch_one(&mut *tx)
@@ -100,9 +100,8 @@ impl UserRepository for PgUserRepository {
                 family_name = $1,
                 given_name = $2,
                 email = $3,
-                active = $4,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $5
+            WHERE id = $4
             RETURNING
                 id, family_name, given_name, email, active, last_login_at,
                 created_at, updated_at
@@ -110,7 +109,6 @@ impl UserRepository for PgUserRepository {
             user.family_name.0,
             user.given_name.0,
             user.email.0,
-            user.active,
             id.0
         )
         .fetch_optional(&mut *tx)

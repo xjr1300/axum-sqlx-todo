@@ -5,8 +5,10 @@ use config::Config;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 
-use infra::postgres::repositories::create_pg_repositories;
+use infra::AppState;
 use settings::AppSettings;
+
+use app::routes::create_router;
 
 /// アプリケーションエントリーポイント
 #[tokio::main]
@@ -31,11 +33,12 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("Failed to connect to the database")?;
 
-    // リポジトリコレクションを作成
-    let repositories = create_pg_repositories(pool);
-
     // ルーターを作成
-    let router = app::routes::create_router(repositories);
+    let app_state = AppState {
+        app_settings: app_settings.clone(),
+        pool,
+    };
+    let router = create_router(app_state);
 
     // HTTPサーバーを起動
     let address = app_settings.http_server.bind_address();

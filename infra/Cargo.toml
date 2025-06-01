@@ -6,9 +6,14 @@ edition = "2024"
 [dependencies]
 argon2.workspace = true
 async-trait.workspace = true
+axum.workspace = true
 domain = { path = "../domain" }
+use_case = { path = "../use_case" }
 password-hash.workspace = true
 rand.workspace = true
 secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+settings = { path = "../settings" }
 sqlx.workspace = true
 time.workspace = true

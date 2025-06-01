@@ -30,6 +30,6 @@ sqlx = { version = "0.8", features = [
   "time",
 ] }
 thiserror = "2"
-time = { version = "0.3", features = ["serde", "macros"] }
+time = { version = "0.3", features = ["serde", "formatting", "macros"] }
 tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4", "serde"] }

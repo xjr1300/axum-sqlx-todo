@@ -1,7 +1,7 @@
 use axum::{Json, extract::State};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{OffsetDateTime, serde::rfc3339};
 
 use domain::{
     DomainError, DomainResult,
@@ -11,10 +11,11 @@ use domain::{
 };
 use use_case::user::UserUseCase;
 
-use super::ApiError;
+use super::{ApiError, ApiResult, serialize_option_offset_datetime};
 use crate::{AppState, postgres::repositories::PgUserRepository};
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignUpRequestBody {
     family_name: String,
     given_name: String,
@@ -35,14 +36,21 @@ impl TryFrom<SignUpRequestBody> for UserInput {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserResponseBody {
     id: String,
     family_name: String,
     given_name: String,
     email: String,
     active: bool,
+    #[serde(
+        serialize_with = "serialize_option_offset_datetime",
+        skip_serializing_if = "Option::is_none"
+    )]
     last_login_at: Option<OffsetDateTime>,
+    #[serde(serialize_with = "rfc3339::serialize")]
     created_at: OffsetDateTime,
+    #[serde(serialize_with = "rfc3339::serialize")]
     updated_at: OffsetDateTime,
 }
 
@@ -60,8 +68,6 @@ impl From<User> for UserResponseBody {
         }
     }
 }
-
-type ApiResult<T> = Result<T, ApiError>;
 
 /// サインアップハンドラ
 pub async fn sign_up(

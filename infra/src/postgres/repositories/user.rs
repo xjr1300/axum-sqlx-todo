@@ -66,7 +66,12 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_one(&mut *tx)
         .await
-        .map_err(repository_error)?;
+        .map_err(|e| {
+            let mut e = repository_error(e);
+            e.messages
+                .push("The email address might already be in use".into());
+            e
+        })?;
         user_commit(tx, row).await
     }
 

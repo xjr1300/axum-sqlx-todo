@@ -1,6 +1,5 @@
-use time::OffsetDateTime;
-
 use garde::Validate as _;
+use time::OffsetDateTime;
 
 use crate::models::primitives::Id;
 use crate::models::user::User;

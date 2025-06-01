@@ -7,8 +7,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use serde::Serializer;
+use time::{OffsetDateTime, serde::rfc3339};
 
 use domain::{DomainError, DomainErrorKind};
+
+/// API結果
+type ApiResult<T> = Result<T, ApiError>;
 
 /// APIエラー
 pub struct ApiError {
@@ -47,4 +52,17 @@ impl From<DomainError> for ApiError {
 /// ヘルスチェックハンドラ
 pub async fn health_check() -> &'static str {
     "Ok, the server is running!"
+}
+
+fn serialize_option_offset_datetime<S>(
+    dt: &Option<OffsetDateTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match dt {
+        Some(dt) => rfc3339::serialize(dt, serializer),
+        _ => unreachable!(),
+    }
 }

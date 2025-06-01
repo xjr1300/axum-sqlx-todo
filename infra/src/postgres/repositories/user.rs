@@ -3,12 +3,12 @@ use sqlx::PgTransaction;
 use time::OffsetDateTime;
 
 use domain::{
-    DomainError, DomainResult,
+    DomainError, DomainErrorKind, DomainResult,
     models::{PHCString, User, UserId},
     repositories::{UserInput, UserRepository},
 };
 
-use super::{PgRepository, commit};
+use super::{PgRepository, commit, repository_error};
 
 struct UserRow {
     id: UserId,
@@ -66,7 +66,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_one(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         user_commit(tx, row).await
     }
 
@@ -85,7 +85,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         row.map(User::try_from).transpose()
     }
 
@@ -113,7 +113,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match row {
             Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
@@ -140,7 +140,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match row {
             Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
@@ -171,7 +171,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match row {
             Some(row) => user_commit(tx, row).await,
             None => user_not_found(id),
@@ -190,7 +190,7 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match raw_hashed_password {
             Some(raw_hashed_password) => {
                 PHCString::new(SecretString::new(raw_hashed_password.into()))
@@ -217,7 +217,7 @@ impl UserRepository for PgUserRepository {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match affected_rows.rows_affected() {
             0 => user_not_found(id),
             _ => {
@@ -239,7 +239,7 @@ impl UserRepository for PgUserRepository {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))?;
+        .map_err(repository_error)?;
         match affected_rows.rows_affected() {
             0 => user_not_found(id),
             _ => {
@@ -256,7 +256,10 @@ async fn user_commit(tx: PgTransaction<'_>, row: UserRow) -> DomainResult<User> 
 }
 
 fn user_not_found<T>(id: UserId) -> DomainResult<T> {
-    Err(DomainError::NotFound(
-        format!("User with id {} not found", id).into(),
-    ))
+    let message = format!("User with id {} not found", id);
+    Err(DomainError {
+        kind: DomainErrorKind::NotFound,
+        messages: vec![message.clone().into()],
+        source: anyhow::anyhow!(message),
+    })
 }

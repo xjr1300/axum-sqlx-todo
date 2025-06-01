@@ -1,6 +1,5 @@
 mod todo;
 mod user;
-
 pub use todo::*;
 pub use user::*;
 
@@ -8,7 +7,7 @@ use std::marker::PhantomData;
 
 use sqlx::{PgPool, Postgres, Transaction};
 
-use domain::{DomainError, DomainResult};
+use domain::{DomainError, DomainErrorKind, DomainResult};
 
 /// PostgreSQLトランザクション
 pub type PgTransaction<'a> = Transaction<'a, Postgres>;
@@ -34,10 +33,7 @@ impl<T> PgRepository<T> {
     ///
     /// トランザクション
     pub async fn begin(&self) -> DomainResult<PgTransaction<'_>> {
-        self.pool
-            .begin()
-            .await
-            .map_err(|e| DomainError::Repository(e.to_string().into()))
+        self.pool.begin().await.map_err(repository_error)
     }
 }
 
@@ -47,7 +43,13 @@ impl<T> PgRepository<T> {
 ///
 /// * `tx`: トランザクション
 pub async fn commit(tx: PgTransaction<'_>) -> DomainResult<()> {
-    tx.commit()
-        .await
-        .map_err(|e| DomainError::Repository(e.to_string().into()))
+    tx.commit().await.map_err(repository_error)
+}
+
+fn repository_error(e: sqlx::Error) -> DomainError {
+    DomainError {
+        kind: DomainErrorKind::Repository,
+        messages: vec![format!("{e}").into()],
+        source: e.into(),
+    }
 }

@@ -4,7 +4,9 @@ use garde::Validate as _;
 
 use crate::models::primitives::Id;
 use crate::models::user::User;
-use crate::{DomainError, DomainResult, impl_i32_primitive, impl_string_primitive};
+use crate::{
+    DomainError, DomainErrorKind, DomainResult, impl_i32_primitive, impl_string_primitive,
+};
 
 /// Todo ID
 pub type TodoId = Id<Todo>;
@@ -91,24 +93,34 @@ impl Todo {
     fn validate(&self) -> DomainResult<()> {
         // 作成日時は更新日時と同じか、更新日時よりも前でなくてはならない。
         if self.created_at > self.updated_at {
-            return Err(DomainError::Validation(
-                "created_at must be less than updated_at".into(),
-            ));
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec!["created_at must be less than or equal to updated_at".into()],
+                source: anyhow::anyhow!("created_at must be less than or equal to updated_at"),
+            });
         }
 
         // Todoが完了している場合
         if let Some(completed_at) = self.completed_at {
             // 完了日時は作成日時と同じか、作成日時よりも後でなくてはならない。
             if completed_at < self.created_at {
-                return Err(DomainError::Validation(
-                    "completed_at must be greater than or equal to  created_at".into(),
-                ));
+                return Err(DomainError {
+                    kind: DomainErrorKind::Validation,
+                    messages: vec![
+                        "completed_at must be greater than or equal to created_at".into(),
+                    ],
+                    source: anyhow::anyhow!(
+                        "completed_at must be greater than or equal to created_at"
+                    ),
+                });
             }
             // 完了日時は更新日時と等しくなくてはならない。
             if completed_at != self.updated_at {
-                return Err(DomainError::Validation(
-                    "completed_at must be equal to updated_at".into(),
-                ));
+                return Err(DomainError {
+                    kind: DomainErrorKind::Validation,
+                    messages: vec!["completed_at must be equal to updated_at".into()],
+                    source: anyhow::anyhow!("completed_at must be equal to updated_at"),
+                });
             }
         }
 

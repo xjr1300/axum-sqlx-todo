@@ -5,7 +5,10 @@ use secrecy::{ExposeSecret, SecretString};
 use time::OffsetDateTime;
 
 use super::primitives::Id;
-use crate::{DomainError, DomainResult, impl_string_primitive, starts_or_ends_with_whitespace};
+use crate::{
+    DomainError, DomainErrorKind, DomainResult, impl_string_primitive,
+    starts_or_ends_with_whitespace,
+};
 
 /// ユーザーID
 pub type UserId = Id<User>;
@@ -66,40 +69,57 @@ impl RawPassword {
         };
         // パスワードの長さを確認
         if value.is_empty() || !(PASSWORD_MIN_LENGTH..=PASSWORD_MAX_LENGTH).contains(&value.len()) {
-            return Err(DomainError::Validation(
-                format!("The password length is greater than or equal to {} characters and less than or equal to {} characters", PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH)
-                    .into()));
+            let message = format!(
+                "The password length must be between {} and {} characters",
+                PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH
+            );
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.clone().into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         // 大文字のアルファベットが含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_uppercase()) {
-            return Err(DomainError::Validation(
-                "The password must contain an uppercase letter".into(),
-            ));
+            let message = "The password must contain an uppercase letter";
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         // 小文字のアルファベットが含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_lowercase()) {
-            return Err(DomainError::Validation(
-                "The password must contain a lowercase letter".into(),
-            ));
+            let message = "The password must contain an lowercase letter";
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         // 数字が含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_digit()) {
-            return Err(DomainError::Validation(
-                "The password must contain a digit".into(),
-            ));
+            let message = "The password must contain a digit";
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         // シンボルが含まれるか確認
         if !value
             .chars()
             .any(|ch| PASSWORD_SYMBOLS_CANDIDATES.contains(ch))
         {
-            return Err(DomainError::Validation(
-                format!(
-                    "The password must contain a symbol({})",
-                    PASSWORD_SYMBOLS_CANDIDATES
-                )
-                .into(),
-            ));
+            let message = format!(
+                "The password must contain a symbol({})",
+                PASSWORD_SYMBOLS_CANDIDATES
+            );
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.clone().into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         // 文字の出現回数を確認して、同じ文字が指定された数以上ないか確認
         let mut number_of_chars: HashMap<char, u64> = HashMap::new();
@@ -108,13 +128,15 @@ impl RawPassword {
         });
         let max_number_of_appearances = number_of_chars.values().max().unwrap();
         if PASSWORD_MAX_NUMBER_OF_SAME_CHAR < *max_number_of_appearances {
-            return Err(DomainError::Validation(
-                format!(
-                    "Passwords can't contain more than {} identical characters",
-                    PASSWORD_MAX_NUMBER_OF_SAME_CHAR
-                )
-                .into(),
-            ));
+            let message = format!(
+                "Passwords can't contain more than {} identical characters",
+                PASSWORD_MAX_NUMBER_OF_SAME_CHAR
+            );
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.clone().into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         Ok(Self(SecretString::new(value.into())))
     }
@@ -124,9 +146,12 @@ impl PHCString {
     pub fn new(value: SecretString) -> DomainResult<Self> {
         let value = value.expose_secret();
         if value.is_empty() || value.len() > 255 {
-            return Err(DomainError::Unexpected(
-                "The length of PHC strings should be less or equal to 255 characters".into(),
-            ));
+            let message = "The length of PHC strings should be less or equal to 255 characters";
+            return Err(DomainError {
+                kind: DomainErrorKind::Unexpected,
+                messages: vec![message.into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         Ok(Self(SecretString::new(value.into())))
     }
@@ -190,8 +215,8 @@ mod tests {
     fn test_raw_password_fail(#[case] password: &str, #[case] message: &str) -> anyhow::Result<()> {
         let result = RawPassword::new(SecretString::new(password.into()));
         assert!(result.is_err());
-        if let Err(DomainError::Validation(msg)) = result {
-            assert!(msg.contains(message));
+        if let Err(e) = result {
+            assert!(e.to_string().contains(message));
         } else {
             panic!("Expected DomainError::Validation");
         }

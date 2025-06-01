@@ -43,7 +43,11 @@ macro_rules! impl_string_primitive {
                 let value = Self(value);
                 match value.validate() {
                     Ok(_) => Ok(value),
-                    Err(e) => Err($crate::DomainError::Validation(e.to_string().into())),
+                    Err(e) => Err($crate::DomainError {
+                        kind: $crate::DomainErrorKind::Validation,
+                        messages: vec![e.to_string().into()],
+                        source: e.into(),
+                    }),
                 }
             }
         }
@@ -80,7 +84,11 @@ macro_rules! impl_i32_primitive {
                 let value = Self(value);
                 match value.validate() {
                     Ok(_) => Ok(value),
-                    Err(e) => Err($crate::DomainError::Validation(e.to_string().into())),
+                    Err(e) => Err($crate::DomainError {
+                        kind: $crate::DomainErrorKind::Validation,
+                        messages: vec![e.to_string().into()],
+                        source: e.into(),
+                    }),
                 }
             }
         }

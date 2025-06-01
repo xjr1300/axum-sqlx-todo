@@ -5,7 +5,7 @@ use argon2::{
 use secrecy::{ExposeSecret as _, SecretString};
 
 use crate::{
-    DomainError, DomainResult,
+    DomainError, DomainErrorKind, DomainResult,
     models::{PHCString, RawPassword},
 };
 
@@ -36,17 +36,20 @@ pub fn create_hashed_password(
         settings.hash_parallelism,
         None,
     )
-    .map_err(|e| {
-        DomainError::Unexpected(
-            format!("Failed to create password hash parameter for password: {e}").into(),
-        )
+    .map_err(|e| DomainError {
+        kind: DomainErrorKind::Unexpected,
+        messages: vec![format!("Failed to create password hash parameters: {e}").into()],
+        source: anyhow::anyhow!(e),
     })?;
     // PHC文字列を生成
     let phc_string = Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
         .hash_password(peppered_password.expose_secret().as_bytes(), &salt)
-        .map_err(|e| DomainError::Unexpected(format!("Failed to create phc string: {e}").into()))?
-        .to_string();
-    Ok(PHCString(SecretString::new(phc_string.into())))
+        .map_err(|e| DomainError {
+            kind: DomainErrorKind::Unexpected,
+            messages: vec![format!("Failed to create a phc string: {e}").into()],
+            source: anyhow::anyhow!(e),
+        })?;
+    Ok(PHCString(SecretString::new(phc_string.to_string().into())))
 }
 
 /// パスワードを検証する。
@@ -67,8 +70,10 @@ pub fn verify_password(
 ) -> DomainResult<bool> {
     // ハッシュ化されたパスワードをPHC文字列からパース
     let expected_password_hash =
-        PasswordHash::new(hashed_password.0.expose_secret()).map_err(|e| {
-            DomainError::Unexpected(format!("Failed to parse password hash: {e}").into())
+        PasswordHash::new(hashed_password.0.expose_secret()).map_err(|e| DomainError {
+            kind: DomainErrorKind::Unexpected,
+            messages: vec![format!("Failed to parse password hash: {e}").into()],
+            source: anyhow::anyhow!(e),
         })?;
     // パスワードにコショウを振りかけ、パスワードを検証
     let expected_password = sprinkle_pepper(pepper, raw_password);

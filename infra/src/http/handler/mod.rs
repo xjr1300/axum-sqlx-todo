@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use domain::DomainError;
+use domain::{DomainError, DomainErrorKind};
 
 /// APIエラー
 pub struct ApiError {
@@ -29,31 +29,17 @@ impl IntoResponse for ApiError {
 
 impl From<DomainError> for ApiError {
     fn from(error: DomainError) -> Self {
-        match error {
-            DomainError::Validation(msg) => ApiError {
-                status_code: StatusCode::BAD_REQUEST,
-                messages: vec![msg.to_string().into()],
-            },
-            DomainError::NotFound(msg) => ApiError {
-                status_code: StatusCode::NOT_FOUND,
-                messages: vec![msg.to_string().into()],
-            },
-            DomainError::Unauthorized(msg) => ApiError {
-                status_code: StatusCode::UNAUTHORIZED,
-                messages: vec![msg.to_string().into()],
-            },
-            DomainError::Forbidden(msg) => ApiError {
-                status_code: StatusCode::FORBIDDEN,
-                messages: vec![msg.to_string().into()],
-            },
-            DomainError::Repository(msg) => ApiError {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                messages: vec![msg.to_string().into()],
-            },
-            DomainError::Unexpected(msg) => ApiError {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                messages: vec![msg.to_string().into()],
-            },
+        let status_code = match error.kind {
+            DomainErrorKind::Validation => StatusCode::BAD_REQUEST,
+            DomainErrorKind::NotFound => StatusCode::NOT_FOUND,
+            DomainErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
+            DomainErrorKind::Forbidden => StatusCode::FORBIDDEN,
+            DomainErrorKind::Repository => StatusCode::INTERNAL_SERVER_ERROR,
+            DomainErrorKind::Unexpected => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        Self {
+            status_code,
+            messages: error.messages,
         }
     }
 }

@@ -1,34 +1,50 @@
-use std::borrow::Cow;
-
 pub mod models;
 pub mod password;
 pub mod repositories;
 
-/// ドメインエラー
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum DomainError {
+use std::borrow::Cow;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DomainErrorKind {
     /// 検証エラー
-    #[error("{0}")]
-    Validation(Cow<'static, str>),
-
+    Validation,
     /// エンティティが存在しない
-    #[error("{0} is not found")]
-    NotFound(Cow<'static, str>),
-
+    NotFound,
     /// 認証されていない
-    #[error("{0}")]
-    Unauthorized(Cow<'static, str>),
-
+    Unauthorized,
     /// 禁止された操作
-    #[error("{0}")]
-    Forbidden(Cow<'static, str>),
-
-    #[error("{0}")]
-    Repository(Cow<'static, str>),
-
+    Forbidden,
+    /// リポジトリエラー
+    Repository,
     /// 予期しないエラー
-    #[error("{0}")]
-    Unexpected(Cow<'static, str>),
+    Unexpected,
+}
+
+impl std::fmt::Display for DomainErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DomainErrorKind::Validation => write!(f, "Validation Error"),
+            DomainErrorKind::NotFound => write!(f, "Not Found"),
+            DomainErrorKind::Unauthorized => write!(f, "Unauthorized"),
+            DomainErrorKind::Forbidden => write!(f, "Forbidden"),
+            DomainErrorKind::Repository => write!(f, "Repository Error"),
+            DomainErrorKind::Unexpected => write!(f, "Unexpected Error"),
+        }
+    }
+}
+
+/// ドメインエラー
+#[derive(Debug, thiserror::Error)]
+pub struct DomainError {
+    pub kind: DomainErrorKind,
+    pub messages: Vec<Cow<'static, str>>,
+    pub source: anyhow::Error,
+}
+
+impl std::fmt::Display for DomainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DomainError: {} - {:?}", self.kind, self.messages)
+    }
 }
 
 /// ドメイン結果

@@ -5,11 +5,15 @@ edition = "2024"
 
 [dependencies]
 async-trait.workspace = true
+argon2.workspace = true
 garde.workspace = true
+rand.workspace = true
 secrecy.workspace = true
+settings = { path = "../settings" }
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+anyhow.workspace = true
 rstest.workspace = true

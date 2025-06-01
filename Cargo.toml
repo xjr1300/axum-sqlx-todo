@@ -1,14 +1,21 @@
 
 [workspace]
-members = ["app", "domain", "infra"]
+members = ["app", "domain", "infra", "settings", "use_cases"]
 resolver = "3"
 
 [workspace.dependencies]
 anyhow = "1"
+argon2 = "0.5"
 async-trait = "0.1"
 axum = "0.8"
 config = { version = "0.15", features = ["toml"] }
 garde = { version = "0.22", features = ["derive", "email"] }
+password-hash = { version = "0.5", features = ["rand_core"] }
+# rand = "0.9" depends on rand_core = "0.9"
+# but password-hash = "0.5" depends on rand_core = "0.6"
+# because rand = "0.8" depends on rand_core = "0.6",
+# so we use rand = "0.8" here
+rand = "0.8"
 rstest = "0.25"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

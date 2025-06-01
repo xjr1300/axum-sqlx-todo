@@ -10,3 +10,9 @@ password = "todo-password"
 database = "todo_db"
 max_connections = 100
 connection_timeout = 15
+
+[password]
+pepper = "4gDuO/d{*GpQCyhURjXFv61p"
+hash_memory = 12288
+hash_iterations = 3
+hash_parallelism = 1

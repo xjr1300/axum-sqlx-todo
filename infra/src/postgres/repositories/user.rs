@@ -1,12 +1,12 @@
-use secrecy::ExposeSecret as _;
+use secrecy::{ExposeSecret as _, SecretString};
+use sqlx::PgTransaction;
+use time::OffsetDateTime;
 
 use domain::{
     DomainError, DomainResult,
-    models::{HashedPassword, User, UserId},
+    models::{PHCString, User, UserId},
     repositories::{UserInput, UserRepository},
 };
-use sqlx::PgTransaction;
-use time::OffsetDateTime;
 
 use super::{PgRepository, commit};
 
@@ -43,7 +43,7 @@ pub type PgUserRepository = PgRepository<User>;
 #[async_trait::async_trait]
 impl UserRepository for PgUserRepository {
     /// ユーザーを新規作成する。
-    async fn create(&self, user: UserInput, hashed_password: HashedPassword) -> DomainResult<User> {
+    async fn create(&self, user: UserInput, hashed_password: PHCString) -> DomainResult<User> {
         let mut tx = self.begin().await?;
         let row = sqlx::query_as!(
             UserRow,
@@ -181,7 +181,7 @@ impl UserRepository for PgUserRepository {
     }
 
     /// ユーザーのパスワードを取得する。
-    async fn get_hashed_password(&self, id: UserId) -> DomainResult<HashedPassword> {
+    async fn get_hashed_password(&self, id: UserId) -> DomainResult<PHCString> {
         let raw_hashed_password = sqlx::query_scalar!(
             r#"
             SELECT hashed_password
@@ -194,7 +194,9 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(|e| DomainError::Repository(e.to_string().into()))?;
         match raw_hashed_password {
-            Some(hashed_password) => HashedPassword::new(hashed_password),
+            Some(raw_hashed_password) => {
+                PHCString::new(SecretString::new(raw_hashed_password.into()))
+            }
             None => user_not_found(id),
         }
     }
@@ -203,7 +205,7 @@ impl UserRepository for PgUserRepository {
     async fn update_hashed_password(
         &self,
         id: UserId,
-        hashed_password: HashedPassword,
+        hashed_password: PHCString,
     ) -> DomainResult<()> {
         let mut tx = self.begin().await?;
         let affected_rows = sqlx::query!(

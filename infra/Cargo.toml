@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+argon2.workspace = true
 async-trait.workspace = true
 domain = { path = "../domain" }
+password-hash.workspace = true
+rand.workspace = true
 secrecy.workspace = true
 sqlx.workspace = true
 time.workspace = true

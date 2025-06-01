@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 pub mod models;
+pub mod password;
 pub mod repositories;
 
 /// ドメインエラー

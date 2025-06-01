@@ -8,6 +8,8 @@ pub struct AppSettings {
     pub http_server: HttpServerSettings,
     /// データベース設定
     pub database: DatabaseSettings,
+    /// パスワード設定
+    pub password: PasswordSettings,
 }
 
 /// HTTPサーバー設定
@@ -36,6 +38,19 @@ pub struct DatabaseSettings {
     pub max_connections: u32,
     /// 接続タイムアウト（秒）
     pub connection_timeout: u64,
+}
+
+/// パスワード設定
+#[derive(Debug, Clone, Deserialize)]
+pub struct PasswordSettings {
+    /// ペッパー
+    pub pepper: SecretString,
+    /// パスワードをハッシュ化するときのメモリサイズ
+    pub hash_memory: u32,
+    /// パスワードをハッシュ化するときの反復回数
+    pub hash_iterations: u32,
+    /// パスワードをハッシュ化するときの並列度
+    pub hash_parallelism: u32,
 }
 
 impl HttpServerSettings {

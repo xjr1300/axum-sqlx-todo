@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::{
     DomainResult,
-    models::{Email, FamilyName, GivenName, HashedPassword, User, UserId},
+    models::{Email, FamilyName, GivenName, PHCString, User, UserId},
 };
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub struct UserInput {
 #[async_trait::async_trait]
 pub trait UserRepository {
     /// ユーザーを新規作成する。
-    async fn create(&self, user: UserInput, hashed_password: HashedPassword) -> DomainResult<User>;
+    async fn create(&self, user: UserInput, hashed_password: PHCString) -> DomainResult<User>;
 
     /// ユーザーをIDで取得する。
     async fn by_id(&self, id: UserId) -> DomainResult<Option<User>>;
@@ -35,13 +35,13 @@ pub trait UserRepository {
     ) -> DomainResult<User>;
 
     /// ユーザーのパスワードを取得する。
-    async fn get_hashed_password(&self, id: UserId) -> DomainResult<HashedPassword>;
+    async fn get_hashed_password(&self, id: UserId) -> DomainResult<PHCString>;
 
     /// ユーザーのパスワードを更新する。
     async fn update_hashed_password(
         &self,
         id: UserId,
-        hashed_password: HashedPassword,
+        hashed_password: PHCString,
     ) -> DomainResult<()>;
 
     /// ユーザーを削除する。

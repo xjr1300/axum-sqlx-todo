@@ -6,8 +6,7 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 
 use infra::postgres::repositories::create_pg_repositories;
-
-use app::settings::AppSettings;
+use settings::AppSettings;
 
 /// アプリケーションエントリーポイント
 #[tokio::main]

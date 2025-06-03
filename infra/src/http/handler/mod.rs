@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serializer;
 use time::{OffsetDateTime, serde::rfc3339};
 
@@ -65,4 +66,11 @@ where
         Some(dt) => rfc3339::serialize(dt, serializer),
         _ => unreachable!(),
     }
+}
+
+fn serialize_secret_string<S>(s: &SecretString, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(s.expose_secret())
 }

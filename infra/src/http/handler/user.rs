@@ -9,14 +9,14 @@ use domain::{
     password::create_hashed_password,
     repositories::UserInput,
 };
-use use_case::user::UserUseCase;
+use use_case::user::{LoginInput, LoginOutput, UserUseCase};
 
-use super::{ApiError, ApiResult, serialize_option_offset_datetime};
+use super::{ApiError, ApiResult, serialize_option_offset_datetime, serialize_secret_string};
 use crate::{
     AppState, postgres::repositories::PgUserRepository, redis::token::RedisTokenRepository,
 };
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignUpRequestBody {
     family_name: String,
@@ -37,7 +37,7 @@ impl TryFrom<SignUpRequestBody> for UserInput {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponseBody {
     id: String,
@@ -85,13 +85,75 @@ pub async fn sign_up(
     let input = UserInput::try_from(request_body).map_err(ApiError::from)?;
 
     // ユーザーを登録
-    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
-    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    let use_case = UserUseCase::new(user_repo, token_repo);
+    let use_case = user_use_case(&app_state);
     let user = use_case
         .sign_up(input, hashed_password)
         .await
         .map_err(ApiError::from)?;
     let response_body = UserResponseBody::from(user);
     Ok(Json(response_body))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginRequestBody {
+    email: String,
+    password: SecretString,
+}
+
+impl TryFrom<LoginRequestBody> for LoginInput {
+    type Error = DomainError;
+
+    fn try_from(input: LoginRequestBody) -> DomainResult<Self> {
+        Ok(LoginInput {
+            email: Email::new(input.email)?,
+            raw_password: RawPassword::new(input.password)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginResponseBody {
+    #[serde(serialize_with = "serialize_secret_string")]
+    access_token: SecretString,
+    #[serde(serialize_with = "rfc3339::serialize")]
+    access_expiration: OffsetDateTime,
+    #[serde(serialize_with = "serialize_secret_string")]
+    refresh_token: SecretString,
+    #[serde(serialize_with = "rfc3339::serialize")]
+    refresh_expiration: OffsetDateTime,
+}
+
+impl From<LoginOutput> for LoginResponseBody {
+    fn from(output: LoginOutput) -> Self {
+        Self {
+            access_token: output.access_token.0,
+            access_expiration: output.access_expiration,
+            refresh_token: output.refresh_token.0,
+            refresh_expiration: output.refresh_expiration,
+        }
+    }
+}
+
+/// ログインハンドラ
+pub async fn login(
+    State(app_state): State<AppState>,
+    Json(request_body): Json<LoginRequestBody>,
+) -> ApiResult<Json<LoginResponseBody>> {
+    let settings = &app_state.app_settings;
+    let input = LoginInput::try_from(request_body).map_err(ApiError::from)?;
+    let use_case = user_use_case(&app_state);
+    let output = use_case
+        .login(input, &settings.password, &settings.login, &settings.token)
+        .await
+        .map_err(ApiError::from)?;
+    let response_body = LoginResponseBody::from(output);
+    Ok(Json(response_body))
+}
+
+fn user_use_case(app_state: &AppState) -> UserUseCase<PgUserRepository, RedisTokenRepository> {
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    UserUseCase::new(user_repo, token_repo)
 }

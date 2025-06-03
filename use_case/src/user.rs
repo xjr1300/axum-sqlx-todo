@@ -100,7 +100,7 @@ where
     /// ログイン試行履歴のログイン試行回数を1に、ログイン試行開始日時を現在の日時に更新する。
     pub async fn login(
         &self,
-        login_input: LoginInput,
+        input: LoginInput,
         password_settings: &PasswordSettings,
         login_settings: &LoginSettings,
         token_settings: &TokenSettings,
@@ -108,9 +108,9 @@ where
         // 現在日時を取得
         let attempted_at = OffsetDateTime::now_utc();
         // Eメールアドレスからユーザーを取得
-        let user = self.user_repository.by_email(&login_input.email).await?;
+        let user = self.user_repository.by_email(&input.email).await?;
         if user.is_none() {
-            let message = format!("User with email {} not found", login_input.email);
+            let message = format!("User with email {} not found", input.email);
             return Err(DomainError {
                 kind: DomainErrorKind::NotFound,
                 messages: vec![message.clone().into()],
@@ -120,7 +120,7 @@ where
         let user = user.unwrap();
         // ユーザーのアクティブフラグを確認
         if !user.active {
-            let message = format!("User with email {} is not active", login_input.email);
+            let message = format!("User with email {} is not active", input.email);
             return Err(DomainError {
                 kind: DomainErrorKind::Forbidden,
                 messages: vec![message.clone().into()],
@@ -131,7 +131,7 @@ where
         let hashed_password = self.user_repository.get_hashed_password(user.id).await?;
         // ユーザーのパスワードを検証
         match verify_password(
-            &login_input.raw_password,
+            &input.raw_password,
             &password_settings.pepper,
             &hashed_password,
         )? {
@@ -195,7 +195,6 @@ where
                         history_does_not_exist(&self.user_repository, &user, attempted_at).await?;
                     }
                 }
-
                 Err(DomainError {
                     kind: DomainErrorKind::Unauthorized,
                     messages: vec!["Invalid email or password".into()],

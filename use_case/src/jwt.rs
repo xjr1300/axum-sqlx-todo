@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, str::FromStr as _};
 
 use hmac::{Hmac, Mac};
-use jwt::{SignWithKey as _, VerifyWithKey as _};
+use jwt::{AlgorithmType, Header, SignWithKey as _, Token, VerifyWithKey as _};
 use secrecy::{ExposeSecret as _, SecretString};
-use sha2::Sha256;
+use sha2::Sha384;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ pub struct TokenPair {
     pub refresh: RefreshToken,
 }
 
-type HmacKey = Hmac<Sha256>;
+type HmacKey = Hmac<Sha384>;
 
 /// クレイム
 #[derive(Debug, Clone, Copy)]
@@ -78,15 +78,21 @@ pub fn generate_token_pair(
 /// JWT
 fn generate_token(claim: Claim, secret_key: &SecretString) -> DomainResult<SecretString> {
     let key: HmacKey = generate_hmac_key(secret_key)?;
+    let header = Header {
+        algorithm: AlgorithmType::Hs384,
+        ..Default::default()
+    };
     let mut claims = BTreeMap::new();
     claims.insert(SUBJECT_KEY, claim.user_id.0.to_string());
     claims.insert(EXPIRATION_KEY, claim.expiration.to_string());
-    let token = claims.sign_with_key(&key).map_err(|e| DomainError {
-        kind: DomainErrorKind::Unexpected,
-        messages: vec![format!("Failed to sign JWT: {e}").into()],
-        source: e.into(),
-    })?;
-    Ok(SecretString::new(token.into()))
+    let token = Token::new(header, claims)
+        .sign_with_key(&key)
+        .map_err(|e| DomainError {
+            kind: DomainErrorKind::Unexpected,
+            messages: vec![format!("Failed to sign JWT: {e}").into()],
+            source: e.into(),
+        })?;
+    Ok(SecretString::new(token.as_str().into()))
 }
 
 fn generate_hmac_key(secret_key: &SecretString) -> DomainResult<HmacKey> {

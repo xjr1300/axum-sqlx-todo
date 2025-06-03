@@ -14,6 +14,6 @@ use user::create_user_routes;
 pub fn create_router(app_state: AppState) -> Router {
     axum::Router::new()
         .route("/health-check", get(health_check))
-        .merge(create_user_routes(app_state.clone()))
+        .nest("/users", create_user_routes(app_state.clone()))
         .with_state(app_state)
 }

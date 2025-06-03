@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::{
     DomainResult,
-    models::{Email, FamilyName, GivenName, PHCString, User, UserId},
+    models::{Email, FamilyName, GivenName, LoginFailedHistory, PHCString, User, UserId},
 };
 
 #[derive(Debug, Clone)]
@@ -20,14 +20,14 @@ pub trait UserRepository {
     /// ユーザーをIDで取得する。
     async fn by_id(&self, id: UserId) -> DomainResult<Option<User>>;
 
+    /// ユーザーをEメールアドレスで取得する。
+    async fn by_email(&self, email: &Email) -> DomainResult<Option<User>>;
+
     /// ユーザーを更新する。
     async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User>;
 
-    /// ユーザーの有効状態を更新する。
-    async fn update_active(&self, id: UserId, active: bool) -> DomainResult<User>;
-
     /// ユーザーの最終ログイン日時を更新する。
-    async fn update_last_login_at(
+    async fn update_last_logged_in_at(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
@@ -45,4 +45,35 @@ pub trait UserRepository {
 
     /// ユーザーを削除する。
     async fn delete(&self, id: UserId) -> DomainResult<()>;
+
+    /// ユーザーのログイン失敗履歴を登録する。
+    async fn create_login_failure_history(
+        &self,
+        user_id: UserId,
+        number_of_attempts: i32,
+        attempted_at: OffsetDateTime,
+    ) -> DomainResult<LoginFailedHistory>;
+
+    /// ユーザーのログイン失敗履歴を取得する。
+    async fn get_login_failure_history(
+        &self,
+        user_id: UserId,
+    ) -> DomainResult<Option<LoginFailedHistory>>;
+
+    /// ユーザーのアクティブ状態と、ユーザーの連続ログイン試行回数を更新する。
+    async fn update_active_and_number_of_attempts(
+        &self,
+        user_id: UserId,
+        active: bool,
+        number_of_attempts: i32,
+    ) -> DomainResult<()>;
+
+    /// ユーザーのログイン失敗履歴をリセットする。
+    ///
+    /// 連続ログイン試行回数を1に設定して、最初にログインを試行した日時を指定された日時に更新する。
+    async fn reset_login_failure_history(
+        &self,
+        user_id: UserId,
+        attempted_at: OffsetDateTime,
+    ) -> DomainResult<()>;
 }

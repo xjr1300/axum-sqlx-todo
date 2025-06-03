@@ -8,8 +8,14 @@ pub struct AppSettings {
     pub http_server: HttpServerSettings,
     /// データベース設定
     pub database: DatabaseSettings,
+    /// Redis設定
+    pub redis: RedisSettings,
     /// パスワード設定
     pub password: PasswordSettings,
+    /// ログイン設定
+    pub login: LoginSettings,
+    /// トークン設定
+    pub token: TokenSettings,
 }
 
 /// HTTPサーバー設定
@@ -53,6 +59,35 @@ pub struct PasswordSettings {
     pub hash_parallelism: u32,
 }
 
+/// ログイン設定
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct LoginSettings {
+    /// 連続ログイン試行許容時間（秒）
+    pub attempts_seconds: u64,
+    /// 連続ログイン試行許容最大回数（秒）
+    pub max_attempts: u32,
+}
+
+/// トークン設定
+#[derive(Debug, Clone, Deserialize)]
+pub struct TokenSettings {
+    /// アクセストークンの有効期限（秒）
+    pub access_expiration: u64,
+    /// リフレッシュトークンの有効期限（秒）
+    pub refresh_expiration: u64,
+    /// JWTシークレットキー
+    pub jwt_secret: SecretString,
+}
+
+/// Redis設定
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisSettings {
+    /// ポート番号
+    pub port: u16,
+    /// ホスト
+    pub host: String,
+}
+
 impl HttpServerSettings {
     /// バインドするアドレス（ホスト名とポート番号）を返す。
     pub fn bind_address(&self) -> String {
@@ -71,5 +106,12 @@ impl DatabaseSettings {
             self.port,
             self.database
         )
+    }
+}
+
+impl RedisSettings {
+    /// RedisURIを返す。
+    pub fn uri(&self) -> String {
+        format!("redis://{}:{}", self.host, self.port)
     }
 }

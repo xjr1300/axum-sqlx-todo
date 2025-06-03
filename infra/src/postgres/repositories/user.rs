@@ -1,42 +1,15 @@
 use secrecy::{ExposeSecret as _, SecretString};
 use sqlx::PgTransaction;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use domain::{
     DomainError, DomainErrorKind, DomainResult,
-    models::{PHCString, User, UserId},
+    models::{Email, LoginFailedHistory, PHCString, User, UserId},
     repositories::{UserInput, UserRepository},
 };
 
 use super::{PgRepository, commit, repository_error};
-
-struct UserRow {
-    id: UserId,
-    family_name: String,
-    given_name: String,
-    email: String,
-    active: bool,
-    last_login_at: Option<OffsetDateTime>,
-    created_at: OffsetDateTime,
-    updated_at: OffsetDateTime,
-}
-
-impl TryFrom<UserRow> for User {
-    type Error = DomainError;
-
-    fn try_from(row: UserRow) -> Result<Self, Self::Error> {
-        Ok(User {
-            id: row.id,
-            family_name: row.family_name.try_into()?,
-            given_name: row.given_name.try_into()?,
-            email: row.email.try_into()?,
-            active: row.active,
-            last_login_at: row.last_login_at,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        })
-    }
-}
 
 pub type PgUserRepository = PgRepository<User>;
 
@@ -94,6 +67,25 @@ impl UserRepository for PgUserRepository {
         row.map(User::try_from).transpose()
     }
 
+    /// ユーザーをEメールアドレスで取得する。
+    async fn by_email(&self, email: &Email) -> DomainResult<Option<User>> {
+        let row = sqlx::query_as!(
+            UserRow,
+            r#"
+            SELECT
+                id, family_name, given_name, email, active, last_login_at,
+                created_at, updated_at
+            FROM users
+            WHERE email = $1
+            "#,
+            email.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(repository_error)?;
+        row.map(User::try_from).transpose()
+    }
+
     /// ユーザーを更新する。
     async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User> {
         let mut tx = self.begin().await?;
@@ -125,35 +117,8 @@ impl UserRepository for PgUserRepository {
         }
     }
 
-    /// ユーザーの有効状態を更新する。
-    async fn update_active(&self, id: UserId, active: bool) -> DomainResult<User> {
-        let mut tx = self.begin().await?;
-        let row = sqlx::query_as!(
-            UserRow,
-            r#"
-            UPDATE users
-            SET
-                active = $1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-            RETURNING
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
-            "#,
-            active,
-            id.0
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(repository_error)?;
-        match row {
-            Some(row) => user_commit(tx, row).await,
-            None => user_not_found(id),
-        }
-    }
-
     /// ユーザーの最終ログイン日時を更新する。
-    async fn update_last_login_at(
+    async fn update_last_logged_in_at(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
@@ -253,6 +218,133 @@ impl UserRepository for PgUserRepository {
             }
         }
     }
+
+    /// ユーザーのログイン失敗履歴を登録する。
+    async fn create_login_failure_history(
+        &self,
+        user_id: UserId,
+        number_of_attempts: i32,
+        attempted_at: OffsetDateTime,
+    ) -> DomainResult<LoginFailedHistory> {
+        let mut tx = self.begin().await?;
+        let row = sqlx::query_as!(
+            LoginFailedHistoryRow,
+            r#"
+            INSERT INTO login_failed_histories (
+                user_id, number_of_attempts, attempted_at, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING
+                user_id, number_of_attempts, attempted_at, created_at, updated_at
+            "#,
+            user_id.0,
+            number_of_attempts,
+            attempted_at
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        commit(tx).await?;
+        Ok(LoginFailedHistory::from(row))
+    }
+
+    /// ユーザーのログイン失敗履歴を取得する。
+    async fn get_login_failure_history(
+        &self,
+        user_id: UserId,
+    ) -> DomainResult<Option<LoginFailedHistory>> {
+        Ok(sqlx::query_as!(
+            LoginFailedHistoryRow,
+            r#"
+            SELECT
+                user_id, number_of_attempts, attempted_at, created_at, updated_at
+            FROM login_failed_histories
+            WHERE user_id = $1
+            "#,
+            user_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(repository_error)?
+        .map(LoginFailedHistory::from))
+    }
+
+    /// ユーザーのアクティブ状態と、ユーザーの連続ログイン試行回数を更新する。
+    async fn update_active_and_number_of_attempts(
+        &self,
+        user_id: UserId,
+        active: bool,
+        number_of_attempts: i32,
+    ) -> DomainResult<()> {
+        let mut tx = self.begin().await?;
+        // ユーザーのアクティブ状態を更新
+        let affected_rows = sqlx::query!(
+            r#"
+            UPDATE users
+            SET
+                active = $1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+            "#,
+            active,
+            user_id.0
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        if affected_rows.rows_affected() == 0 {
+            return user_not_found(user_id);
+        }
+        // ユーザーのログイン失敗履歴を更新
+        let affected_rows = sqlx::query!(
+            r#"
+            UPDATE login_failed_histories
+            SET
+                number_of_attempts = $1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $2
+            "#,
+            number_of_attempts,
+            user_id.0
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        match affected_rows.rows_affected() {
+            0 => user_not_found(user_id),
+            _ => Ok(()),
+        }
+    }
+
+    /// ユーザーのログイン失敗履歴をリセットする。
+    ///
+    /// 連続ログイン試行回数を1に設定して、最初にログインを試行した日時を指定された日時に更新する。
+    async fn reset_login_failure_history(
+        &self,
+        user_id: UserId,
+        attempted_at: OffsetDateTime,
+    ) -> DomainResult<()> {
+        let mut tx = self.begin().await?;
+        let affected_rows = sqlx::query!(
+            r#"
+            UPDATE login_failed_histories
+            SET
+                number_of_attempts = 1,
+                attempted_at = $1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $2
+            "#,
+            attempted_at,
+            user_id.0
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        match affected_rows.rows_affected() {
+            0 => user_not_found(user_id),
+            _ => Ok(()),
+        }
+    }
 }
 
 async fn user_commit(tx: PgTransaction<'_>, row: UserRow) -> DomainResult<User> {
@@ -267,4 +359,52 @@ fn user_not_found<T>(id: UserId) -> DomainResult<T> {
         messages: vec![message.clone().into()],
         source: anyhow::anyhow!(message),
     })
+}
+
+struct UserRow {
+    id: Uuid,
+    family_name: String,
+    given_name: String,
+    email: String,
+    active: bool,
+    last_login_at: Option<OffsetDateTime>,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+}
+
+impl TryFrom<UserRow> for User {
+    type Error = DomainError;
+
+    fn try_from(row: UserRow) -> Result<Self, Self::Error> {
+        Ok(User {
+            id: row.id.into(),
+            family_name: row.family_name.try_into()?,
+            given_name: row.given_name.try_into()?,
+            email: row.email.try_into()?,
+            active: row.active,
+            last_login_at: row.last_login_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+}
+
+struct LoginFailedHistoryRow {
+    user_id: Uuid,
+    number_of_attempts: i32,
+    attempted_at: OffsetDateTime,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+}
+
+impl From<LoginFailedHistoryRow> for LoginFailedHistory {
+    fn from(row: LoginFailedHistoryRow) -> Self {
+        LoginFailedHistory {
+            user_id: row.user_id.into(),
+            number_of_attempts: row.number_of_attempts as u32,
+            attempted_at: row.attempted_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
 }

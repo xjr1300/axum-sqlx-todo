@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 
 use garde::Validate as _;
 use secrecy::{ExposeSecret, SecretString};
@@ -12,6 +13,19 @@ use crate::{
 
 /// ユーザーID
 pub type UserId = Id<User>;
+
+impl Copy for UserId {}
+impl PartialEq for UserId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for UserId {}
+impl Hash for UserId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
 
 /// ユーザーの苗字
 #[derive(Debug, Clone, garde::Validate)]
@@ -157,6 +171,14 @@ impl PHCString {
     }
 }
 
+/// アクセストークン
+#[derive(Debug, Clone)]
+pub struct AccessToken(pub SecretString);
+
+/// リフレッシュトークン
+#[derive(Debug, Clone)]
+pub struct RefreshToken(pub SecretString);
+
 /// ユーザー
 #[derive(Debug, Clone)]
 pub struct User {
@@ -181,13 +203,18 @@ pub struct User {
 /// ログイン失敗履歴
 ///
 /// 連続ログイン試行許容時間内に、ログインに失敗した回数を記録する。
-pub struct LoginFailureHistory {
+#[derive(Debug, Clone, Copy)]
+pub struct LoginFailedHistory {
     /// ユーザーID
     pub user_id: UserId,
     /// 試行回数
     pub number_of_attempts: u32,
     /// 最初に試行に失敗した日時
-    pub first_attempted_at: OffsetDateTime,
+    pub attempted_at: OffsetDateTime,
+    /// 作成日時
+    pub created_at: OffsetDateTime,
+    /// 更新日時
+    pub updated_at: OffsetDateTime,
 }
 
 #[cfg(test)]

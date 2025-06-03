@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use uuid::Uuid;
 
 /// ID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Id<T>(pub Uuid, PhantomData<T>);
 
 impl<T> Default for Id<T> {

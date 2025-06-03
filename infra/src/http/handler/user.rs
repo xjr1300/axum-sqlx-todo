@@ -12,7 +12,9 @@ use domain::{
 use use_case::user::UserUseCase;
 
 use super::{ApiError, ApiResult, serialize_option_offset_datetime};
-use crate::{AppState, postgres::repositories::PgUserRepository};
+use crate::{
+    AppState, postgres::repositories::PgUserRepository, redis::token::RedisTokenRepository,
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,8 +85,9 @@ pub async fn sign_up(
     let input = UserInput::try_from(request_body).map_err(ApiError::from)?;
 
     // ユーザーを登録
-    let repository = PgUserRepository::new(app_state.pool.clone());
-    let use_case = UserUseCase::new(repository);
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    let use_case = UserUseCase::new(user_repo, token_repo);
     let user = use_case
         .sign_up(input, hashed_password)
         .await

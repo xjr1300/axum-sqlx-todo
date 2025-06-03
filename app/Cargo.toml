@@ -7,6 +7,7 @@ edition = "2024"
 anyhow.workspace = true
 axum.workspace = true
 config.workspace = true
+deadpool-redis.workspace = true
 domain = { path = "../domain" }
 infra = { path = "../infra" }
 secrecy.workspace = true

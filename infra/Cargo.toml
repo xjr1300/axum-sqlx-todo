@@ -8,13 +8,17 @@ anyhow.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
 axum.workspace = true
+deadpool-redis.workspace = true
 domain = { path = "../domain" }
-use_case = { path = "../use_case" }
 password-hash.workspace = true
 rand.workspace = true
+redis.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 settings = { path = "../settings" }
+sha2.workspace = true
 sqlx.workspace = true
 time.workspace = true
+use_case = { path = "../use_case" }
+uuid.workspace = true

@@ -16,13 +16,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE index if NOT EXISTS idx_users_email ON users (email);
 
--- table: login_failure_histories
-CREATE TABLE IF NOT EXISTS login_failure_histories (
+-- table: login_failed_histories
+CREATE TABLE IF NOT EXISTS login_failed_histories (
     user_id UUID NOT NULL,
     number_of_attempts INTEGER NOT NULL,
-    first_attempted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_login_failure_histories PRIMARY KEY (user_id),
-    CONSTRAINT fk_login_failure_histories_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    attempted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_login_failed_histories PRIMARY KEY (user_id),
+    CONSTRAINT fk_login_failed_histories_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 -- table: todo_statuses

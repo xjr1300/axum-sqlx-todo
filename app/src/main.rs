@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use config::Config;
+use deadpool_redis::Config as RedisConfig;
 use sqlx::postgres::PgPoolOptions;
 use tokio::net::TcpListener;
 
@@ -23,8 +24,8 @@ async fn main() -> anyhow::Result<()> {
         .context("The contents of the app_settings.toml file is incorrect")?;
     println!("App settings: {:?}", app_settings);
 
-    // データベース接続プールを作成
-    let pool = PgPoolOptions::new()
+    // データベースコネクションプールを作成
+    let pg_pool = PgPoolOptions::new()
         .max_connections(app_settings.database.max_connections)
         .acquire_timeout(Duration::from_secs(
             app_settings.database.connection_timeout,
@@ -32,11 +33,22 @@ async fn main() -> anyhow::Result<()> {
         .connect(&app_settings.database.uri())
         .await
         .context("Failed to connect to the database")?;
+    // Redisコネクションプールを作成
+
+    let config = RedisConfig {
+        url: Some(app_settings.redis.uri()),
+        connection: None,
+        pool: None,
+    };
+    let redis_pool = config
+        .create_pool(None)
+        .context("Failed to create Redis connection pool")?;
 
     // ルーターを作成
     let app_state = AppState {
         app_settings: app_settings.clone(),
-        pool,
+        pg_pool,
+        redis_pool,
     };
     let router = create_router(app_state);
 

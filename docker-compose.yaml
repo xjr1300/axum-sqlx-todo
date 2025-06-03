@@ -8,3 +8,8 @@ services:
       POSTGRES_DB: todo_db
     ports:
       - "5432:5432"
+  redis:
+    image: redis:8
+    container_name: todo_redis
+    ports:
+      - "6379:6379"

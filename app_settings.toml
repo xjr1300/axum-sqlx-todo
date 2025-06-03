@@ -11,8 +11,21 @@ database = "todo_db"
 max_connections = 100
 connection_timeout = 15
 
+[redis]
+host = "localhost"
+port = 6379
+
 [password]
 pepper = "4gDuO/d{*GpQCyhURjXFv61p"
 hash_memory = 12288
 hash_iterations = 3
 hash_parallelism = 1
+
+[login]
+attempts_seconds = 600 # 10 minutes
+max_attempts = 5
+
+[token]
+access_expiration = 10_800              # 3 hours
+refresh_expiration = 86_400             # 24 hours
+jwt_secret = "ExCyE[2wyP@]JuY)4;]ZyS_M"

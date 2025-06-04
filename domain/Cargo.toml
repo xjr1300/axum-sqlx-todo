@@ -6,12 +6,9 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-argon2.workspace = true
 enum-display.workspace = true
 garde.workspace = true
-rand.workspace = true
 secrecy.workspace = true
-settings = { path = "../settings" }
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true

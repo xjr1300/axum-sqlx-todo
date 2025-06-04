@@ -1,5 +1,4 @@
 pub mod models;
-pub mod password;
 pub mod repositories;
 
 use std::borrow::Cow;

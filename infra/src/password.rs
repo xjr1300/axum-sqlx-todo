@@ -4,7 +4,7 @@ use argon2::{
 };
 use secrecy::{ExposeSecret as _, SecretString};
 
-use crate::{
+use domain::{
     DomainError, DomainErrorKind, DomainResult,
     models::{PHCString, RawPassword},
 };

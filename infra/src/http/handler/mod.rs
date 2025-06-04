@@ -74,3 +74,17 @@ where
 {
     serializer.serialize_str(s.expose_secret())
 }
+
+fn internal_server_error<E: std::error::Error>(err: E) -> ApiError {
+    ApiError {
+        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+        messages: vec![err.to_string().into()],
+    }
+}
+
+fn bad_request(message: Cow<'static, str>) -> ApiError {
+    ApiError {
+        status_code: StatusCode::BAD_REQUEST,
+        messages: vec![message],
+    }
+}

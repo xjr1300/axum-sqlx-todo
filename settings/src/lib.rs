@@ -18,9 +18,21 @@ pub struct AppSettings {
     pub token: TokenSettings,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename = "protocol")]
+#[serde(rename_all = "lowercase")]
+pub enum HttpProtocol {
+    /// HTTPプロトコル
+    Http,
+    /// HTTPSプロトコル
+    Https,
+}
+
 /// HTTPサーバー設定
 #[derive(Debug, Clone, Deserialize)]
 pub struct HttpServerSettings {
+    /// プロトコル
+    pub protocol: HttpProtocol,
     /// ホスト名
     pub host: String,
     /// ポート番号

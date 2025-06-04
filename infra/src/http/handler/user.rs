@@ -1,7 +1,16 @@
-use axum::{Json, extract::State, http::StatusCode};
-use secrecy::SecretString;
+use std::borrow::Cow;
+
+use axum::{
+    Json,
+    body::Body,
+    extract::State,
+    http::{HeaderValue, Response, StatusCode, header::SET_COOKIE},
+    response::IntoResponse,
+};
+use cookie::{Cookie, SameSite};
+use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
-use settings::{LoginSettings, TokenSettings};
+use settings::{HttpProtocol, HttpServerSettings, LoginSettings, TokenSettings};
 use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
@@ -179,10 +188,9 @@ pub struct LoginResponseBody {
 pub async fn login(
     State(app_state): State<AppState>,
     Json(request_body): Json<LoginRequestBody>,
-) -> ApiResult<Json<LoginResponseBody>> {
+) -> ApiResult<Response<Body>> {
     let attempted_at = OffsetDateTime::now_utc();
     let settings = &app_state.app_settings;
-
     let user_repository = PgUserRepository::new(app_state.pg_pool);
     let token_repository = RedisTokenRepository::new(app_state.redis_pool);
 
@@ -212,19 +220,22 @@ pub async fn login(
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
-        let response_body = store_login_info(
+        Ok(handle_login_succeed(
+            &settings.http_server,
             &settings.token,
             user_repository,
             token_repository,
             user.id,
             attempted_at,
         )
-        .await?;
-        // TODO: クッキーヘッダーを設定
-        Ok(Json(response_body))
+        .await?)
     } else {
-        handle_login_failure(user_repository, &settings.login, user.id, attempted_at).await?;
-        Err(login_failed_response())
+        Err(
+            handle_login_failure(user_repository, &settings.login, user.id, attempted_at)
+                .await
+                .err()
+                .unwrap(),
+        )
     }
 }
 
@@ -278,6 +289,70 @@ async fn store_login_info(
     })
 }
 
+fn create_cookie<'c, N>(
+    protocol: HttpProtocol,
+    domain: &'c str,
+    name: N,
+    value: &'c SecretString,
+    max_age: Duration,
+) -> Cookie<'c>
+where
+    N: Into<Cow<'c, str>>,
+{
+    let cookie = Cookie::build((name.into(), value.expose_secret()))
+        .domain(domain)
+        .path("/")
+        .http_only(true)
+        .secure(protocol == HttpProtocol::Https)
+        .same_site(SameSite::Strict)
+        .max_age(max_age);
+    cookie.build()
+}
+
+async fn handle_login_succeed(
+    http_server_settings: &HttpServerSettings,
+    token_settings: &TokenSettings,
+    user_repository: PgUserRepository,
+    token_repository: RedisTokenRepository,
+    user_id: UserId,
+    attempted_at: OffsetDateTime,
+) -> ApiResult<Response<Body>> {
+    // ログイン情報を記録
+    let response_body = store_login_info(
+        token_settings,
+        user_repository,
+        token_repository,
+        user_id,
+        attempted_at,
+    )
+    .await?;
+    // レスポンスを作成
+    let mut response = Json(response_body.clone()).into_response();
+    let access_cookie = create_cookie(
+        http_server_settings.protocol,
+        &http_server_settings.host,
+        "access_token",
+        &response_body.access_token,
+        Duration::seconds(token_settings.access_expiration as i64),
+    );
+    let refresh_cookie = create_cookie(
+        http_server_settings.protocol,
+        &http_server_settings.host,
+        "refresh_token",
+        &response_body.refresh_token,
+        Duration::seconds(token_settings.refresh_expiration as i64),
+    );
+    response.headers_mut().insert(
+        SET_COOKIE,
+        access_cookie.to_string().parse::<HeaderValue>().unwrap(),
+    );
+    response.headers_mut().append(
+        SET_COOKIE,
+        refresh_cookie.to_string().parse::<HeaderValue>().unwrap(),
+    );
+    Ok(response)
+}
+
 async fn handle_login_failure(
     user_repository: PgUserRepository,
     login_settings: &LoginSettings,
@@ -325,7 +400,7 @@ async fn handle_login_failure(
                 .map_err(internal_server_error)?;
         }
     }
-    Ok(())
+    Err(login_failed_response())
 }
 
 const LOGIN_FAILED: &str = "Login failed. Please check your email and password";

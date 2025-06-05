@@ -10,7 +10,7 @@ use axum::{
 use cookie::{Cookie, SameSite};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
-use settings::{HttpProtocol, HttpServerSettings, TokenSettings};
+use settings::{HttpProtocol, HttpSettings, TokenSettings};
 use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
@@ -224,7 +224,7 @@ pub async fn login(
         .map_err(internal_server_error)?
     {
         Ok(handle_login_succeed(
-            &settings.http_server,
+            &settings.http,
             &settings.token,
             use_case,
             user.id,
@@ -311,7 +311,7 @@ where
 }
 
 async fn handle_login_succeed(
-    http_server_settings: &HttpServerSettings,
+    http_settings: &HttpSettings,
     token_settings: &TokenSettings,
     use_case: UserUseCase<PgUserRepository, RedisTokenRepository>,
     user_id: UserId,
@@ -322,15 +322,15 @@ async fn handle_login_succeed(
     // レスポンスを作成
     let mut response = Json(response_body.clone()).into_response();
     let access_cookie = create_cookie(
-        http_server_settings.protocol,
-        &http_server_settings.host,
+        http_settings.protocol,
+        &http_settings.host,
         "access_token",
         &response_body.access_token,
         Duration::seconds(token_settings.access_expiration as i64),
     );
     let refresh_cookie = create_cookie(
-        http_server_settings.protocol,
-        &http_server_settings.host,
+        http_settings.protocol,
+        &http_settings.host,
         "refresh_token",
         &response_body.refresh_token,
         Duration::seconds(token_settings.refresh_expiration as i64),

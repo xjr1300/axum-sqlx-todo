@@ -1,6 +1,6 @@
 log_level = "info"
 
-[http_server]
+[http]
 protocol = "http"
 host = "localhost"
 port = 8000
@@ -10,9 +10,10 @@ host = "localhost"
 port = 5432
 user = "todo"
 password = "todo-password"
-database = "todo_db"
+name = "todo_db"
 max_connections = 100
 connection_timeout = 15
+use_ssl = false
 
 [redis]
 host = "localhost"

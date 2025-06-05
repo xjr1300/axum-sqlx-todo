@@ -1,0 +1,20 @@
+[package]
+name = "test_suite"
+version = "0.1.0"
+edition = "2024"
+
+[[test]]
+name = "integration_tests"
+path = "tests/lib.rs"
+harness = true
+
+[dependencies]
+app = { path = "../app" }
+axum.workspace = true
+deadpool-redis.workspace = true
+infra = { path = "../infra" }
+secrecy.workspace = true
+settings = { path = "../settings" }
+sqlx.workspace = true
+tokio.workspace = true
+uuid.workspace = true

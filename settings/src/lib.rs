@@ -1,6 +1,7 @@
 use log::Level as LogLevel;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer};
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 /// アプリケーション設定
 #[derive(Debug, Clone, Deserialize)]
@@ -10,7 +11,7 @@ pub struct AppSettings {
     #[serde(deserialize_with = "deserialize_log_level")]
     pub log_level: LogLevel,
     /// HTTPサーバー設定
-    pub http_server: HttpServerSettings,
+    pub http: HttpSettings,
     /// データベース設定
     pub database: DatabaseSettings,
     /// Redis設定
@@ -35,7 +36,7 @@ pub enum HttpProtocol {
 
 /// HTTPサーバー設定
 #[derive(Debug, Clone, Deserialize)]
-pub struct HttpServerSettings {
+pub struct HttpSettings {
     /// プロトコル
     pub protocol: HttpProtocol,
     /// ホスト名
@@ -56,11 +57,13 @@ pub struct DatabaseSettings {
     /// パスワード
     pub password: SecretString,
     /// データベース名
-    pub database: String,
+    pub name: String,
     /// 最大接続数
     pub max_connections: u32,
     /// 接続タイムアウト（秒）
     pub connection_timeout: u64,
+    /// SSL/TLSを使用するかどうか
+    pub use_ssl: bool,
 }
 
 /// パスワード設定
@@ -105,7 +108,7 @@ pub struct RedisSettings {
     pub host: String,
 }
 
-impl HttpServerSettings {
+impl HttpSettings {
     /// バインドするアドレス（ホスト名とポート番号）を返す。
     pub fn bind_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
@@ -114,15 +117,19 @@ impl HttpServerSettings {
 
 impl DatabaseSettings {
     /// データベースURIを返す。
-    pub fn uri(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.user,
-            self.password.expose_secret(),
-            self.host,
-            self.port,
-            self.database
-        )
+    pub fn connect_options(&self) -> PgConnectOptions {
+        let ssl_mode = if self.use_ssl {
+            PgSslMode::Require
+        } else {
+            PgSslMode::Prefer
+        };
+        PgConnectOptions::new()
+            .host(&self.host)
+            .port(self.port)
+            .username(&self.user)
+            .password(self.password.expose_secret())
+            .database(&self.name)
+            .ssl_mode(ssl_mode)
     }
 }
 

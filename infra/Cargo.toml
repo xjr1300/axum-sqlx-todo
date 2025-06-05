@@ -8,7 +8,6 @@ anyhow.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
 axum.workspace = true
-axum-extra.workspace = true
 cookie.workspace = true
 deadpool-redis.workspace = true
 domain = { path = "../domain" }

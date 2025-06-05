@@ -7,3 +7,4 @@ edition = "2024"
 log.workspace = true
 secrecy.workspace = true
 serde.workspace = true
+sqlx.workspace = true

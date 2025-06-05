@@ -1,54 +1,8 @@
 pub mod user;
 
-use std::borrow::Cow;
-
-use axum::{
-    Json,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serializer;
 use time::{OffsetDateTime, serde::rfc3339};
-
-use domain::{DomainError, DomainErrorKind};
-
-/// API結果
-type ApiResult<T> = Result<T, ApiError>;
-
-/// APIエラー
-pub struct ApiError {
-    /// HTTPステータスコード
-    status_code: StatusCode,
-    /// エラーメッセージ
-    messages: Vec<Cow<'static, str>>,
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        let body = serde_json::json!({
-            "messages": self.messages,
-        });
-        (self.status_code, Json(body)).into_response()
-    }
-}
-
-impl From<DomainError> for ApiError {
-    fn from(error: DomainError) -> Self {
-        let status_code = match error.kind {
-            DomainErrorKind::Validation => StatusCode::BAD_REQUEST,
-            DomainErrorKind::NotFound => StatusCode::NOT_FOUND,
-            DomainErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
-            DomainErrorKind::Forbidden => StatusCode::FORBIDDEN,
-            DomainErrorKind::Repository => StatusCode::INTERNAL_SERVER_ERROR,
-            DomainErrorKind::Unexpected => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        Self {
-            status_code,
-            messages: error.messages,
-        }
-    }
-}
 
 /// ヘルスチェックハンドラ
 #[tracing::instrument()]
@@ -74,18 +28,4 @@ where
     S: Serializer,
 {
     serializer.serialize_str(s.expose_secret())
-}
-
-fn internal_server_error<E: std::error::Error>(err: E) -> ApiError {
-    ApiError {
-        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-        messages: vec![err.to_string().into()],
-    }
-}
-
-fn bad_request(message: Cow<'static, str>) -> ApiError {
-    ApiError {
-        status_code: StatusCode::BAD_REQUEST,
-        messages: vec![message],
-    }
 }

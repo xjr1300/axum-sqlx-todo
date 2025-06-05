@@ -20,10 +20,13 @@ use domain::{
 };
 use use_case::user::UserUseCase;
 
-use super::{ApiError, ApiResult, serialize_option_offset_datetime, serialize_secret_string};
+use super::{serialize_option_offset_datetime, serialize_secret_string};
 use crate::{
     AppState,
-    http::handler::{bad_request, internal_server_error},
+    http::{
+        ApiError, ApiResult, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, bad_request,
+        internal_server_error,
+    },
     jwt::generate_token_pair,
     password::{create_hashed_password, verify_password},
     postgres::repositories::PgUserRepository,
@@ -324,14 +327,14 @@ async fn handle_login_succeed(
     let access_cookie = create_cookie(
         http_settings.protocol,
         &http_settings.host,
-        "access_token",
+        COOKIE_ACCESS_TOKEN_KEY,
         &response_body.access_token,
         Duration::seconds(token_settings.access_expiration as i64),
     );
     let refresh_cookie = create_cookie(
         http_settings.protocol,
         &http_settings.host,
-        "refresh_token",
+        COOKIE_REFRESH_TOKEN_KEY,
         &response_body.refresh_token,
         Duration::seconds(token_settings.refresh_expiration as i64),
     );

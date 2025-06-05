@@ -75,7 +75,7 @@ pub struct PasswordSettings {
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct LoginSettings {
     /// 連続ログイン試行許容時間（秒）
-    pub attempts_seconds: u64,
+    pub attempts_seconds: u32,
     /// 連続ログイン試行許容最大回数（秒）
     pub max_attempts: u32,
 }

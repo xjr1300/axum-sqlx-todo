@@ -4,19 +4,19 @@ use axum::{
     Json,
     body::Body,
     extract::State,
-    http::{HeaderValue, Response, StatusCode, header::SET_COOKIE},
+    http::{HeaderValue, Response, StatusCode, header},
     response::IntoResponse,
 };
 use cookie::{Cookie, SameSite};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
-use settings::{HttpProtocol, HttpServerSettings, LoginSettings, TokenSettings};
+use settings::{HttpProtocol, HttpServerSettings, TokenSettings};
 use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
     DomainError, DomainResult,
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
-    repositories::{TokenRepository, TokenTtlPair, UserInput, UserRepository},
+    repositories::{TokenTtlPair, UserInput, UserRepository},
 };
 use use_case::user::UserUseCase;
 
@@ -191,13 +191,13 @@ pub async fn login(
 ) -> ApiResult<Response<Body>> {
     let attempted_at = OffsetDateTime::now_utc();
     let settings = &app_state.app_settings;
-    let user_repository = PgUserRepository::new(app_state.pg_pool);
-    let token_repository = RedisTokenRepository::new(app_state.redis_pool);
+    let use_case = user_use_case(&app_state);
 
     // Eメールアドレスからユーザーを取得
     let email =
         Email::new(request_body.email).map_err(|_| bad_request("Invalid email address".into()))?;
-    let user = user_repository
+    let user = use_case
+        .user_repository
         .by_email(&email)
         .await
         .map_err(internal_server_error)?
@@ -210,7 +210,8 @@ pub async fn login(
         });
     }
     // ユーザーのハッシュ化されたパスワードを取得
-    let hashed_password = user_repository
+    let hashed_password = use_case
+        .user_repository
         .get_hashed_password(user.id)
         .await
         .map_err(internal_server_error)?;
@@ -223,31 +224,34 @@ pub async fn login(
         Ok(handle_login_succeed(
             &settings.http_server,
             &settings.token,
-            user_repository,
-            token_repository,
+            use_case,
             user.id,
             attempted_at,
         )
         .await?)
     } else {
-        Err(
-            handle_login_failure(user_repository, &settings.login, user.id, attempted_at)
-                .await
-                .err()
-                .unwrap(),
-        )
+        use_case
+            .handle_login_failure(
+                user.id,
+                attempted_at,
+                settings.login.max_attempts,
+                settings.login.attempts_seconds,
+            )
+            .await
+            .map_err(internal_server_error)?;
+        Err(login_failed_response())
     }
 }
 
-fn user_use_case(app_state: &AppState) -> UserUseCase<PgUserRepository> {
+fn user_use_case(app_state: &AppState) -> UserUseCase<PgUserRepository, RedisTokenRepository> {
     let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
-    UserUseCase::new(user_repo)
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    UserUseCase::new(user_repo, token_repo)
 }
 
 async fn store_login_info(
     token_settings: &TokenSettings,
-    user_repository: PgUserRepository,
-    token_repository: RedisTokenRepository,
+    use_case: UserUseCase<PgUserRepository, RedisTokenRepository>,
     user_id: UserId,
     attempted_at: OffsetDateTime,
 ) -> ApiResult<LoginResponseBody> {
@@ -272,13 +276,8 @@ async fn store_login_info(
         refresh: &token_pair.refresh.0,
         refresh_ttl: token_settings.refresh_expiration,
     };
-    token_repository
-        .register_token_pair(user_id, token_ttl_pair)
-        .await
-        .map_err(internal_server_error)?;
-    // ユーザーの最終ログイン日時を更新
-    user_repository
-        .update_last_logged_in_at(user_id, attempted_at)
+    use_case
+        .store_login_info(user_id, token_ttl_pair, attempted_at)
         .await
         .map_err(internal_server_error)?;
     Ok(LoginResponseBody {
@@ -312,20 +311,12 @@ where
 async fn handle_login_succeed(
     http_server_settings: &HttpServerSettings,
     token_settings: &TokenSettings,
-    user_repository: PgUserRepository,
-    token_repository: RedisTokenRepository,
+    use_case: UserUseCase<PgUserRepository, RedisTokenRepository>,
     user_id: UserId,
     attempted_at: OffsetDateTime,
 ) -> ApiResult<Response<Body>> {
     // ログイン情報を記録
-    let response_body = store_login_info(
-        token_settings,
-        user_repository,
-        token_repository,
-        user_id,
-        attempted_at,
-    )
-    .await?;
+    let response_body = store_login_info(token_settings, use_case, user_id, attempted_at).await?;
     // レスポンスを作成
     let mut response = Json(response_body.clone()).into_response();
     let access_cookie = create_cookie(
@@ -343,64 +334,14 @@ async fn handle_login_succeed(
         Duration::seconds(token_settings.refresh_expiration as i64),
     );
     response.headers_mut().insert(
-        SET_COOKIE,
+        header::SET_COOKIE,
         access_cookie.to_string().parse::<HeaderValue>().unwrap(),
     );
     response.headers_mut().append(
-        SET_COOKIE,
+        header::SET_COOKIE,
         refresh_cookie.to_string().parse::<HeaderValue>().unwrap(),
     );
     Ok(response)
-}
-
-async fn handle_login_failure(
-    user_repository: PgUserRepository,
-    login_settings: &LoginSettings,
-    user_id: UserId,
-    attempted_at: OffsetDateTime,
-) -> ApiResult<()> {
-    // ユーザーのログイン失敗履歴を取得
-    let failed_history = user_repository
-        .get_login_failure_history(user_id)
-        .await
-        .map_err(internal_server_error)?;
-    match failed_history {
-        Some(history) => {
-            // ユーザーのログイン失敗履歴が存在する場合
-            let elapsed_time = attempted_at - history.attempted_at;
-            if elapsed_time < Duration::seconds(login_settings.attempts_seconds as i64) {
-                /*
-                ログインを試行した日時から最初にログインに失敗した日時までの経過時間が、連続ログイン試行許容時間未満の場合、
-                ログイン試行回数を1回増やす。
-                そして、新しいログイン試行回数が、連続ログイン試行許容回数を超えば場合は、ユーザーのアクティブフラグを無効にする。
-                 */
-                let new_attempts = history.number_of_attempts + 1;
-                let new_active = new_attempts <= login_settings.max_attempts;
-                user_repository
-                    .update_active_and_number_of_attempts(user_id, new_active, new_attempts as i32)
-                    .await
-                    .map_err(internal_server_error)?;
-            } else {
-                /*
-                ログイン試行開始日時から現在日時までの経過時間が、連続ログイン試行許容時間以上の場合、
-                最初にログインを試行した日時をログインを試行した日時に更新して、連続ログイン試行回数を
-                1に設定する。
-                 */
-                user_repository
-                    .reset_login_failure_history(user_id, attempted_at)
-                    .await
-                    .map_err(internal_server_error)?;
-            }
-        }
-        None => {
-            // ユーザーのログイン失敗履歴が存在しない場合は、そのユーザーのログイン失敗履歴を登録
-            let _ = user_repository
-                .create_login_failure_history(user_id, 1, attempted_at)
-                .await
-                .map_err(internal_server_error)?;
-        }
-    }
-    Err(login_failed_response())
 }
 
 const LOGIN_FAILED: &str = "Login failed. Please check your email and password";

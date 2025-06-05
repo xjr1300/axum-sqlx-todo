@@ -86,6 +86,7 @@ impl From<User> for UserResponseBody {
 }
 
 /// サインアップハンドラ
+#[tracing::instrument(skip(app_state))]
 pub async fn sign_up(
     State(app_state): State<AppState>,
     Json(request_body): Json<SignUpRequestBody>,
@@ -185,6 +186,7 @@ pub struct LoginResponseBody {
 /// ```
 ///
 /// ログイン試行履歴のログイン試行回数を1に、ログイン試行開始日時を現在の日時に更新する。
+#[tracing::instrument(skip(app_state))]
 pub async fn login(
     State(app_state): State<AppState>,
     Json(request_body): Json<LoginRequestBody>,

@@ -51,6 +51,7 @@ impl From<DomainError> for ApiError {
 }
 
 /// ヘルスチェックハンドラ
+#[tracing::instrument()]
 pub async fn health_check() -> &'static str {
     "Ok, the server is running!"
 }

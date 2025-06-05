@@ -10,8 +10,13 @@ config.workspace = true
 deadpool-redis.workspace = true
 domain = { path = "../domain" }
 infra = { path = "../infra" }
+log.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 settings = { path = "../settings" }
 sqlx.workspace = true
 tokio.workspace = true
+tracing.workspace = true
+tracing-bunyan-formatter.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true

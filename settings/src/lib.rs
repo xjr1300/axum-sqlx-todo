@@ -1,9 +1,14 @@
+use log::Level as LogLevel;
 use secrecy::{ExposeSecret as _, SecretString};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// アプリケーション設定
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub struct AppSettings {
+    /// ログレベル
+    #[serde(deserialize_with = "deserialize_log_level")]
+    pub log_level: LogLevel,
     /// HTTPサーバー設定
     pub http_server: HttpServerSettings,
     /// データベース設定
@@ -125,5 +130,23 @@ impl RedisSettings {
     /// RedisURIを返す。
     pub fn uri(&self) -> String {
         format!("redis://{}:{}", self.host, self.port)
+    }
+}
+
+fn deserialize_log_level<'de, D>(deserializer: D) -> Result<LogLevel, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = String::deserialize(deserializer)?;
+    match v.to_lowercase().as_str() {
+        "error" => Ok(LogLevel::Error),
+        "warn" => Ok(LogLevel::Warn),
+        "info" => Ok(LogLevel::Info),
+        "debug" => Ok(LogLevel::Debug),
+        "trace" => Ok(LogLevel::Trace),
+        _ => Err(serde::de::Error::custom(format!(
+            "Invalid log level: {}",
+            v
+        ))),
     }
 }

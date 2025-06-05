@@ -24,6 +24,7 @@ settings = { path = "../settings" }
 sha2.workspace = true
 sqlx.workspace = true
 time.workspace = true
+tracing.workspace = true
 use_case = { path = "../use_case" }
 uuid.workspace = true
 

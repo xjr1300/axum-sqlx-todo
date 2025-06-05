@@ -8,6 +8,8 @@ anyhow.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
 axum.workspace = true
+axum-core.workspace = true
+axum-extra.workspace = true
 cookie.workspace = true
 deadpool-redis.workspace = true
 domain = { path = "../domain" }
@@ -24,6 +26,8 @@ sha2.workspace = true
 sqlx.workspace = true
 time.workspace = true
 tracing.workspace = true
+tokio.workspace = true
+tower.workspace = true
 use_case = { path = "../use_case" }
 uuid.workspace = true
 

@@ -8,6 +8,8 @@ anyhow = "1"
 argon2 = "0.5"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["macros"] }
+axum-core = "0.5"
+axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
 config = { version = "0.15", features = ["toml"] }
 cookie = "0.18"
 enum-display = "0.1"
@@ -44,4 +46,5 @@ tracing = "0.1"
 tracing-bunyan-formatter = "0.3"
 tracing-log = "0.2"
 tracing-subscriber = { version = "0.3", features = ["registry", "env-filter"] }
+tower = "0.5"
 uuid = { version = "1", features = ["v4", "serde"] }

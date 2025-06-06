@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use axum::{
-    Json,
+    Extension, Json,
     body::Body,
     extract::State,
     http::{HeaderValue, Response, StatusCode, header},
@@ -18,7 +18,7 @@ use domain::{
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
     repositories::{TokenTtlPair, UserInput, UserRepository},
 };
-use use_case::user::UserUseCase;
+use use_case::{AuthorizedUser, user::UserUseCase};
 
 use super::{serialize_option_offset_datetime, serialize_secret_string};
 use crate::{
@@ -357,4 +357,10 @@ fn login_failed_response() -> ApiError {
         status_code: StatusCode::UNAUTHORIZED,
         messages: vec![LOGIN_FAILED.into()],
     }
+}
+
+#[tracing::instrument]
+pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<UserResponseBody>> {
+    let response_body = UserResponseBody::from(user.0);
+    Ok(Json(response_body))
 }

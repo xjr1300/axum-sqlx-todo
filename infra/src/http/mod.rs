@@ -61,6 +61,13 @@ pub fn bad_request(message: Cow<'static, str>) -> ApiError {
     }
 }
 
+pub fn unauthorized(message: Cow<'static, str>) -> ApiError {
+    ApiError {
+        status_code: StatusCode::UNAUTHORIZED,
+        messages: vec![message],
+    }
+}
+
 /// クッキーに登録するアクセストークンとリフレッシュトークンのキー
 pub const COOKIE_ACCESS_TOKEN_KEY: &str = "access_token";
 pub const COOKIE_REFRESH_TOKEN_KEY: &str = "refresh_token";

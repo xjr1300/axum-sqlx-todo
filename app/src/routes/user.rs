@@ -1,13 +1,27 @@
-use axum::{Router, routing::post};
+use axum::{
+    Router, middleware,
+    routing::{get, post},
+};
 
 use infra::{
     AppState,
-    http::handler::user::{login, sign_up},
+    http::{
+        handler::user::{login, me, sign_up},
+        middleware::authorized_user_middleware,
+    },
 };
 
 pub fn create_user_routes(app_state: AppState) -> Router<AppState> {
-    Router::new()
+    let router = Router::new()
         .route("/sign-up", post(sign_up))
         .route("/login", post(login))
-        .with_state(app_state)
+        .with_state(app_state.clone());
+    let protected_router = Router::new()
+        .route("/me", get(me))
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            authorized_user_middleware,
+        ))
+        .with_state(app_state);
+    Router::new().merge(router).merge(protected_router)
 }

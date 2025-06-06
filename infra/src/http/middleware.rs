@@ -1,6 +1,7 @@
 use axum::{
     RequestExt as _,
     extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse as _, Response},
 };
@@ -12,11 +13,11 @@ use axum_extra::{
 use secrecy::SecretString;
 
 use domain::repositories::{TokenRepository as _, TokenType, UserRepository as _};
-use use_case::RequestUser;
+use use_case::AuthorizedUser;
 
 use crate::{
     AppState,
-    http::{ApiResult, COOKIE_ACCESS_TOKEN_KEY, bad_request, internal_server_error},
+    http::{ApiError, COOKIE_ACCESS_TOKEN_KEY, internal_server_error},
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
 };
@@ -27,85 +28,92 @@ use crate::{
 /// クッキーにアクセストークンが登録されている場合は、クッキーのアクセストークンを検証する。
 /// クッキーにアクセストークンが登録されていない場合は、AuthorizationヘッダーのBearerトークンを検証する。
 /// したがって、アクセストークンは、クッキーが優先される。
-pub async fn auth_middleware(
+pub async fn authorized_user_middleware(
     State(app_state): State<AppState>,
-    jar: CookieJar,
+    cookie_jar: CookieJar,
     mut request: Request,
     next: Next,
 ) -> Response {
-    // クッキーにアクセストークンが存在するか確認
-    let access_token_cookie = jar.get(COOKIE_ACCESS_TOKEN_KEY);
-    if let Some(cookie) = access_token_cookie {
-        // クッキーにアクセストークンが存在する場合は、クッキーのアクセストークンを検証
-        let token = SecretString::new(cookie.value().into());
-        if let Err(e) = verify_token(app_state, &token, &mut request).await {
-            return e.into_response();
+    // クッキーまたはAuthorizationヘッダーからトークンを取得
+    let token = match get_access_token_from_request(&cookie_jar, &mut request).await {
+        Some(token) => token,
+        None => {
+            // トークンが見つからない場合は、401 Unauthorizedを返す
+            return ApiError {
+                status_code: StatusCode::UNAUTHORIZED,
+                messages: vec!["Access token is missing".into()],
+            }
+            .into_response();
         }
-        // クッキーのアクセストークンを検証したので、次のミドルウェアへ進む
-        return next.run(request).await;
+    };
+    // トークンリポジトリからトークンをキーにトークンコンテンツを取得
+    let token_repository = RedisTokenRepository::new(app_state.redis_pool);
+    let token_content = match token_repository.retrieve_token_content(&token).await {
+        Ok(content) => content,
+        Err(e) => {
+            // トークンコンテンツを取得するときにエラーが発生した場合は、500 Internal Server Errorを返す
+            return internal_server_error(e).into_response();
+        }
+    };
+    // トークンコンテンツを取得できなかった場合は、トークンの有効期限が切れているか、無効なトークンであるため、
+    // 401 Unauthorizedを返す
+    if token_content.is_none() {
+        return ApiError {
+            status_code: StatusCode::UNAUTHORIZED,
+            messages: vec!["Invalid or expired access token".into()],
+        }
+        .into_response();
     }
+    let token_content = token_content.unwrap();
+    // トークンコンテンツからアクセストークン（とみなしているトークン）が、本当にアクセストークンか確認して、
+    // もしアクセストークンでなければ、400 Bad Requestを返す
+    // トークンコンテンツは、アクセストークンであればTokenType::Access、リフレッシュトークンであればTokenType::Refreshを持つ
+    if token_content.token_type != TokenType::Access {
+        return ApiError {
+            status_code: StatusCode::BAD_REQUEST,
+            messages: vec!["Invalid access token".into()],
+        }
+        .into_response();
+    }
+    // アクセストークンが有効であるため、ユーザーを取得
+    let user_repository = PgUserRepository::new(app_state.pg_pool);
+    let user = user_repository.by_id(token_content.user_id).await;
+    // ユーザーを取得するときにエラーが発生した場合は、500 Internal Server Errorを返す
+    if user.is_err() {
+        return internal_server_error(user.err().unwrap()).into_response();
+    }
+    let user = user.unwrap();
+    // ユーザーが存在しない場合は、404 Not Foundを返す
+    if user.is_none() {
+        return ApiError {
+            status_code: StatusCode::NOT_FOUND,
+            messages: vec!["User not found".into()],
+        }
+        .into_response();
+    }
+    // 認証済みユーザーであることが確認できたため、リクエストにユーザー登録
+    request
+        .extensions_mut()
+        .insert(AuthorizedUser(user.unwrap()));
+    next.run(request).await
+}
 
-    // クッキーにアクセストークンが登録されていないため、AuthorizationヘッダーのBearerトークンを検証
+async fn get_access_token_from_request(
+    cookie_jar: &CookieJar,
+    request: &mut Request,
+) -> Option<SecretString> {
+    // クッキーからアクセストークンを取得
+    tracing::debug!("Extracting access token from cookie...");
+    if let Some(cookie_value) = cookie_jar.get(COOKIE_ACCESS_TOKEN_KEY) {
+        tracing::debug!("Found a access token");
+        return Some(SecretString::new(cookie_value.value().into()));
+    }
+    // Authorizationヘッダーからアクセストークンを取得
     let bearer = request
         .extract_parts::<TypedHeader<Authorization<Bearer>>>()
         .await;
     match bearer {
-        Ok(bearer) => {
-            let token = SecretString::new(bearer.token().into());
-            if let Err(e) = verify_token(app_state, &token, &mut request).await {
-                return e.into_response();
-            }
-        }
-        Err(_) => {
-            request.extensions_mut().insert(RequestUser::Anonymous);
-        }
+        Ok(bearer) => Some(SecretString::new(bearer.token().into())),
+        Err(_) => None,
     }
-    next.run(request).await
-}
-
-async fn verify_token(
-    app_state: AppState,
-    token: &SecretString,
-    request: &mut Request,
-) -> ApiResult<()> {
-    let token_repository = RedisTokenRepository::new(app_state.redis_pool);
-    let token_content = token_repository.retrieve_token_content(token).await;
-    match token_content {
-        Ok(Some(content)) => {
-            // トークンリポジトリからトークンをキーにコンテンツを得られた場合
-            match content.token_type {
-                TokenType::Access => {
-                    // アクセストークンの場合、ユーザーIDからユーザーを取得
-                    let user_repository = PgUserRepository::new(app_state.pg_pool);
-                    let user = user_repository
-                        .by_id(content.user_id)
-                        .await
-                        .map_err(internal_server_error)?;
-                    match user {
-                        Some(user) => {
-                            // ユーザーが存在する場合、リクエストの拡張にユーザーを追加
-                            request.extensions_mut().insert(RequestUser::AuthUser(user));
-                        }
-                        None => {
-                            // ユーザーが存在しない場合は、ユーザーを削除された可能性があるため、匿名ユーザーとして扱う
-                            request.extensions_mut().insert(RequestUser::Anonymous);
-                        }
-                    }
-                }
-                TokenType::Refresh => {
-                    // リフレッシュトークンの場合、エラーを返す
-                    return Err(bad_request(
-                        "a refresh token cannot be used for a bearer token".into(),
-                    ));
-                }
-            }
-        }
-        Ok(None) => {
-            // トークンリポジトリからトークンをキーにコンテンツが得られなかった場合は、トークンの有効期限が切れているか
-            // 無効なトークン
-            request.extensions_mut().insert(RequestUser::Anonymous);
-        }
-        Err(e) => return Err(internal_server_error(e)),
-    }
-    Ok(())
 }

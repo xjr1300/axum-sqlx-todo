@@ -1,11 +1,8 @@
 pub mod user;
 
-use axum::{Router, middleware, routing::get};
+use axum::{Router, routing::get};
 
-use infra::{
-    AppState,
-    http::{handler::health_check, middleware::auth_middleware},
-};
+use infra::{AppState, http::handler::health_check};
 use user::create_user_routes;
 
 /// ルーターを作成する。
@@ -18,9 +15,5 @@ pub fn create_router(app_state: AppState) -> Router {
     axum::Router::new()
         .route("/health-check", get(health_check))
         .nest("/users", create_user_routes(app_state.clone()))
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            auth_middleware,
-        ))
         .with_state(app_state)
 }

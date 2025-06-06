@@ -5,17 +5,22 @@ edition = "2024"
 
 [[test]]
 name = "integration_tests"
-path = "tests/lib.rs"
+path = "lib.rs"
 harness = true
 
 [dependencies]
 app = { path = "../app" }
 axum.workspace = true
+cookie = "0.18"
 deadpool-redis.workspace = true
+domain = { path = "../domain" }
 infra = { path = "../infra" }
-reqwest = { version = "0.12", features = ["cookies", "json"] }
+reqwest = { version = "0.12", features = ["json", "cookies"] }
 secrecy.workspace = true
+serde.workspace = true
+serde_json = "1"
 settings = { path = "../settings" }
 sqlx.workspace = true
+time.workspace = true
 tokio.workspace = true
 uuid.workspace = true

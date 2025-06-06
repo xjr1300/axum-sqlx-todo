@@ -14,14 +14,24 @@
 //! to drop the all test databases.
 use std::{path::Path, thread::JoinHandle, time::Duration};
 
+use secrecy::SecretString;
+use serde::{Deserialize, Serialize};
 use sqlx::{Connection as _, Executor as _, PgConnection, PgPool};
+// use time::{OffsetDateTime, serde::rfc3339};
 use tokio::{net::TcpListener, sync::oneshot};
 
 use app::{bind_address, create_redis_pool, load_app_settings, routes::create_router};
-use infra::AppState;
+use domain::{
+    models::{User, UserId},
+    repositories::{TokenContent, TokenRepository, UserRepository},
+};
+use infra::{
+    AppState, postgres::repositories::PgUserRepository, redis::token::RedisTokenRepository,
+};
 use settings::{AppSettings, DatabaseSettings};
 
 pub const TEST_DATABASE_PREFIX: &str = "test_todo_db_";
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Test case for integration tests
 ///
@@ -51,7 +61,7 @@ pub struct TestCase {
     app_handle: JoinHandle<()>,
     shutdown_signal: oneshot::Sender<()>,
     log: bool,
-    pub client: reqwest::Client,
+    pub http_client: reqwest::Client,
 }
 
 impl TestCase {
@@ -69,8 +79,8 @@ impl TestCase {
             redis_pool,
         };
         let (app_handle, shutdown_signal) = spawn_app(app_state.clone(), listener).await;
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(3))
+        let http_client = reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
             .cookie_store(true)
             .build()
             .unwrap();
@@ -79,7 +89,7 @@ impl TestCase {
             app_handle,
             shutdown_signal,
             log,
-            client,
+            http_client,
         }
     }
 
@@ -90,6 +100,16 @@ impl TestCase {
             self.app_state.app_settings.http.host,
             self.app_state.app_settings.http.port,
         )
+    }
+
+    pub async fn user_by_id(&self, id: UserId) -> Option<User> {
+        let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
+        user_repo.by_id(id).await.unwrap()
+    }
+
+    pub async fn token_content_by_token(&self, token: &SecretString) -> Option<TokenContent> {
+        let token_repo = RedisTokenRepository::new(self.app_state.redis_pool.clone());
+        token_repo.get_token_content(token).await.unwrap()
     }
 
     pub async fn end(self) {
@@ -105,6 +125,16 @@ impl TestCase {
             println!("Server has gracefully shutdown.");
         }
     }
+
+    pub async fn sign_up(&self, body: &RawSignUpRequestBody) -> reqwest::Response {
+        let uri = format!("{}/users/sign-up", self.origin());
+        self.http_client.post(&uri).json(body).send().await.unwrap()
+    }
+
+    pub async fn login(&self, body: &RawLoginRequestBody) -> reqwest::Response {
+        let uri = format!("{}/users/login", self.origin());
+        self.http_client.post(&uri).json(body).send().await.unwrap()
+    }
 }
 
 async fn configure_test_app() -> TestApp {
@@ -115,7 +145,7 @@ async fn configure_test_app() -> TestApp {
 
     // Set up the test database
     let database_name =
-        format!("{}_{}", TEST_DATABASE_PREFIX, uuid::Uuid::new_v4()).replace('-', "_");
+        format!("{}{}", TEST_DATABASE_PREFIX, uuid::Uuid::new_v4()).replace('-', "_");
     app_settings.database.name = database_name; // テスト用のデータベース名を設定
     let pg_pool = setup_database(&app_settings.database).await;
 
@@ -195,4 +225,57 @@ fn run_server(app_state: AppState, listener: TcpListener, close_rx: oneshot::Rec
             .await
             .unwrap();
     });
+}
+
+pub struct ResponseParts {
+    /// ステータスコード
+    pub status_code: reqwest::StatusCode,
+    /// ヘッダ
+    pub headers: reqwest::header::HeaderMap,
+    /// ボディ
+    pub body: String,
+}
+
+pub async fn split_response(response: reqwest::Response) -> ResponseParts {
+    ResponseParts {
+        status_code: response.status(),
+        headers: response.headers().clone(),
+        body: response.text().await.unwrap().to_string(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawSignUpRequestBody {
+    pub family_name: String,
+    pub given_name: String,
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawLoginRequestBody {
+    pub email: String,
+    pub password: String,
+}
+
+impl From<RawSignUpRequestBody> for RawLoginRequestBody {
+    fn from(value: RawSignUpRequestBody) -> Self {
+        RawLoginRequestBody {
+            email: value.email,
+            password: value.password,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawLoginResponseBody {
+    pub access_token: String,
+    // #[serde(deserialize_with = "rfc3339::deserialize")]
+    // pub access_expiration: OffsetDateTime,
+    pub refresh_token: String,
+    // #[serde(deserialize_with = "rfc3339::deserialize")]
+    // pub refresh_expiration: OffsetDateTime,
 }

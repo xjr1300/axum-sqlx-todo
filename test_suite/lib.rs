@@ -1,13 +1,14 @@
+mod helpers;
+mod user;
+
 use crate::helpers::TestCase;
 
-mod helpers;
-
 #[tokio::test]
-async fn health_check() {
+async fn integration_health_check() {
     let test_case = TestCase::begin(false).await;
 
     let uri = format!("{}/health-check", test_case.origin());
-    let response = test_case.client.get(&uri).send().await.unwrap();
+    let response = test_case.http_client.get(&uri).send().await.unwrap();
     assert!(
         response.status().is_success(),
         "Health check failed: {}",

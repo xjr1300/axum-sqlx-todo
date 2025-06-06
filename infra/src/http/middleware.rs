@@ -48,7 +48,7 @@ pub async fn authorized_user_middleware(
     };
     // トークンリポジトリからトークンをキーにトークンコンテンツを取得
     let token_repository = RedisTokenRepository::new(app_state.redis_pool);
-    let token_content = match token_repository.retrieve_token_content(&token).await {
+    let token_content = match token_repository.get_token_content(&token).await {
         Ok(content) => content,
         Err(e) => {
             // トークンコンテンツを取得するときにエラーが発生した場合は、500 Internal Server Errorを返す

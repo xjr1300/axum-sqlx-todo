@@ -92,9 +92,9 @@ pub struct LoginSettings {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TokenSettings {
     /// アクセストークンの有効期限（秒）
-    pub access_expiration: u64,
+    pub access_max_age: i64,
     /// リフレッシュトークンの有効期限（秒）
-    pub refresh_expiration: u64,
+    pub refresh_max_age: i64,
     /// JWTシークレットキー
     pub jwt_secret: SecretString,
 }

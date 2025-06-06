@@ -30,6 +30,6 @@ attempts_seconds = 600 # 10 minutes
 max_attempts = 5
 
 [token]
-access_expiration = 10_800                                        # 3 hours
-refresh_expiration = 86_400                                       # 24 hours
+access_max_age = 10_800                                           # 3 hours
+refresh_max_age = 86_400                                          # 24 hours
 jwt_secret = "jijcr^%mgfcwun1t&%(pilx3qdworljt&u^+32*cndimqpl6e9"

@@ -29,10 +29,7 @@ pub trait TokenRepository: Sync + Send {
     /// # 戻り値
     ///
     /// ユーザーIDとトークンの種類
-    async fn retrieve_token_content(
-        &self,
-        token: &SecretString,
-    ) -> DomainResult<Option<TokenContent>>;
+    async fn get_token_content(&self, token: &SecretString) -> DomainResult<Option<TokenContent>>;
 }
 
 /// アクセストークン及びリフレッシュトークンとそれぞれの生存期間
@@ -40,11 +37,11 @@ pub struct TokenTtlPair<'a> {
     /// アクセストークン
     pub access: &'a SecretString,
     /// アクセストークンの生存期間（秒）
-    pub access_ttl: u64,
+    pub access_ttl: i64,
     /// リフレッシュトークン
     pub refresh: &'a SecretString,
     /// リフレッシュトークンの生存期間（秒）
-    pub refresh_ttl: u64,
+    pub refresh_ttl: i64,
 }
 
 /// トークンコンテンツ

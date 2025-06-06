@@ -20,7 +20,9 @@ use domain::{
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
 
-use super::{serialize_option_offset_datetime, serialize_secret_string};
+use super::{
+    deserialize_option_offset_datetime, serialize_option_offset_datetime, serialize_secret_string,
+};
 use crate::{
     AppState,
     http::{
@@ -36,10 +38,10 @@ use crate::{
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignUpRequestBody {
-    family_name: String,
-    given_name: String,
-    email: String,
-    password: SecretString,
+    pub family_name: String,
+    pub given_name: String,
+    pub email: String,
+    pub password: SecretString,
 }
 
 impl TryFrom<SignUpRequestBody> for UserInput {
@@ -54,23 +56,23 @@ impl TryFrom<SignUpRequestBody> for UserInput {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponseBody {
-    id: String,
-    family_name: String,
-    given_name: String,
-    email: String,
-    active: bool,
-    #[serde(
-        serialize_with = "serialize_option_offset_datetime",
-        skip_serializing_if = "Option::is_none"
-    )]
-    last_login_at: Option<OffsetDateTime>,
+    pub id: String,
+    pub family_name: String,
+    pub given_name: String,
+    pub email: String,
+    pub active: bool,
+    #[serde(serialize_with = "serialize_option_offset_datetime")]
+    #[serde(deserialize_with = "deserialize_option_offset_datetime")]
+    pub last_login_at: Option<OffsetDateTime>,
     #[serde(serialize_with = "rfc3339::serialize")]
-    created_at: OffsetDateTime,
+    #[serde(deserialize_with = "rfc3339::deserialize")]
+    pub created_at: OffsetDateTime,
     #[serde(serialize_with = "rfc3339::serialize")]
-    updated_at: OffsetDateTime,
+    #[serde(deserialize_with = "rfc3339::deserialize")]
+    pub updated_at: OffsetDateTime,
 }
 
 impl From<User> for UserResponseBody {
@@ -261,10 +263,8 @@ async fn store_login_info(
     attempted_at: OffsetDateTime,
 ) -> ApiResult<LoginResponseBody> {
     // アクセストークンとリフレッシュトークンを作成
-    let access_expiration =
-        attempted_at + Duration::seconds(token_settings.access_expiration as i64);
-    let refresh_expiration =
-        attempted_at + Duration::seconds(token_settings.refresh_expiration as i64);
+    let access_expiration = attempted_at + Duration::seconds(token_settings.access_max_age);
+    let refresh_expiration = attempted_at + Duration::seconds(token_settings.refresh_max_age);
     let token_pair = generate_token_pair(
         user_id,
         access_expiration,
@@ -277,9 +277,9 @@ async fn store_login_info(
     // Redisに登録するレコードは、トークンの種類別の有効期限を設定する。
     let token_ttl_pair = TokenTtlPair {
         access: &token_pair.access.0,
-        access_ttl: token_settings.access_expiration,
+        access_ttl: token_settings.access_max_age,
         refresh: &token_pair.refresh.0,
-        refresh_ttl: token_settings.refresh_expiration,
+        refresh_ttl: token_settings.refresh_max_age,
     };
     use_case
         .store_login_info(user_id, token_ttl_pair, attempted_at)
@@ -329,14 +329,14 @@ async fn handle_login_succeed(
         &http_settings.host,
         COOKIE_ACCESS_TOKEN_KEY,
         &response_body.access_token,
-        Duration::seconds(token_settings.access_expiration as i64),
+        Duration::seconds(token_settings.access_max_age),
     );
     let refresh_cookie = create_cookie(
         http_settings.protocol,
         &http_settings.host,
         COOKIE_REFRESH_TOKEN_KEY,
         &response_body.refresh_token,
-        Duration::seconds(token_settings.refresh_expiration as i64),
+        Duration::seconds(token_settings.refresh_max_age),
     );
     response.headers_mut().insert(
         header::SET_COOKIE,

@@ -62,12 +62,18 @@ impl TokenRepository for RedisTokenRepository {
         let refresh_key = generate_key(token_pair.refresh);
         let refresh_value = generate_value(user_id, TokenType::Refresh);
         let mut conn = self.connection().await?;
-        store(&mut conn, &access_key, &access_value, token_pair.access_ttl).await?;
+        store(
+            &mut conn,
+            &access_key,
+            &access_value,
+            token_pair.access_ttl as u64,
+        )
+        .await?;
         store(
             &mut conn,
             &refresh_key,
             &refresh_value,
-            token_pair.refresh_ttl,
+            token_pair.refresh_ttl as u64,
         )
         .await?;
 
@@ -83,10 +89,7 @@ impl TokenRepository for RedisTokenRepository {
     /// # 戻り値
     ///
     /// ユーザーIDとトークンの種類
-    async fn retrieve_token_content(
-        &self,
-        token: &SecretString,
-    ) -> DomainResult<Option<TokenContent>> {
+    async fn get_token_content(&self, token: &SecretString) -> DomainResult<Option<TokenContent>> {
         let mut conn = self.connection().await?;
         let key = generate_key(token);
         let value = retrieve(&mut conn, &key).await?;

@@ -3,21 +3,24 @@ use crate::helpers::TestCase;
 mod helpers;
 
 #[tokio::test]
-async fn run_test_skeleton() {
-    // Initialize the test case
-    let test_case = TestCase::begin(true).await;
-    println!("Test application started on port: {}", test_case.port());
+async fn health_check() {
+    let test_case = TestCase::begin(false).await;
 
-    /************************************************************
+    let uri = format!("{}/health-check", test_case.origin());
+    let response = test_case.client.get(&uri).send().await.unwrap();
+    assert!(
+        response.status().is_success(),
+        "Health check failed: {}",
+        response.status()
+    );
+    assert!(
+        response
+            .text()
+            .await
+            .unwrap()
+            .contains("Ok, the server is running!"),
+        "Health check response did not contain 'Ok, the server is running!'"
+    );
 
-            Implement integration test logic here
-
-    *************************************************************/
-
-    // Next lines simulate a graceful shutdown, so real test logic should not be included next lines
-    println!("Waiting for 3 seconds before sending graceful shutdown signal...");
-    std::thread::sleep(std::time::Duration::from_secs(3));
-
-    // Terminate the test case gracefully
     test_case.end().await;
 }

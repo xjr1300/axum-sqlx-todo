@@ -115,6 +115,15 @@ impl HttpSettings {
     }
 }
 
+impl std::fmt::Display for HttpProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HttpProtocol::Http => write!(f, "http"),
+            HttpProtocol::Https => write!(f, "https"),
+        }
+    }
+}
+
 impl DatabaseSettings {
     /// データベースURIを返す。
     pub fn connect_options(&self) -> PgConnectOptions {

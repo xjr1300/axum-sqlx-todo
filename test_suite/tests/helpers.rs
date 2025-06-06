@@ -7,7 +7,12 @@
 //!
 //! The integration test uses the same Redis container as the development environment,
 //! because the access tokens and refresh tokens are highly random.
-use std::{path::Path, thread::JoinHandle};
+//!
+//! [NOTICE]
+//!
+//! A test database is created for each test run, so you must run the `bin/drop_test_dbs.sh` script
+//! to drop the all test databases.
+use std::{path::Path, thread::JoinHandle, time::Duration};
 
 use sqlx::{Connection as _, Executor as _, PgConnection, PgPool};
 use tokio::{net::TcpListener, sync::oneshot};
@@ -15,6 +20,8 @@ use tokio::{net::TcpListener, sync::oneshot};
 use app::{bind_address, create_redis_pool, load_app_settings, routes::create_router};
 use infra::AppState;
 use settings::{AppSettings, DatabaseSettings};
+
+pub const TEST_DATABASE_PREFIX: &str = "test_todo_db_";
 
 /// Test case for integration tests
 ///
@@ -40,27 +47,49 @@ use settings::{AppSettings, DatabaseSettings};
 /// }
 /// ```
 pub struct TestCase {
+    pub app_state: AppState,
     app_handle: JoinHandle<()>,
     shutdown_signal: oneshot::Sender<()>,
-    port: u16,
     log: bool,
+    pub client: reqwest::Client,
 }
 
 impl TestCase {
     pub async fn begin(log: bool) -> Self {
-        let test_app = configure_test_app().await;
-        let port = test_app.app_settings.http.port;
-        let (app_handle, shutdown_signal) = spawn_app(test_app).await;
+        let app = configure_test_app().await;
+        let TestApp {
+            app_settings,
+            listener,
+            pg_pool,
+            redis_pool,
+        } = app;
+        let app_state = AppState {
+            app_settings,
+            pg_pool,
+            redis_pool,
+        };
+        let (app_handle, shutdown_signal) = spawn_app(app_state.clone(), listener).await;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(3))
+            .cookie_store(true)
+            .build()
+            .unwrap();
         Self {
+            app_state,
             app_handle,
             shutdown_signal,
-            port,
             log,
+            client,
         }
     }
 
-    pub fn port(&self) -> u16 {
-        self.port
+    pub fn origin(&self) -> String {
+        format!(
+            "{}://{}:{}",
+            self.app_state.app_settings.http.protocol,
+            self.app_state.app_settings.http.host,
+            self.app_state.app_settings.http.port,
+        )
     }
 
     pub async fn end(self) {
@@ -85,7 +114,8 @@ async fn configure_test_app() -> TestApp {
     let mut app_settings = load_app_settings(path.as_os_str().to_str().unwrap()).unwrap();
 
     // Set up the test database
-    let database_name = format!("test_todo_db_{}", uuid::Uuid::new_v4()).replace('-', "_");
+    let database_name =
+        format!("{}_{}", TEST_DATABASE_PREFIX, uuid::Uuid::new_v4()).replace('-', "_");
     app_settings.database.name = database_name; // テスト用のデータベース名を設定
     let pg_pool = setup_database(&app_settings.database).await;
 
@@ -105,7 +135,7 @@ async fn configure_test_app() -> TestApp {
     }
 }
 
-struct TestApp {
+pub struct TestApp {
     pub app_settings: AppSettings,
     pub listener: TcpListener,
     pub pg_pool: PgPool,
@@ -140,27 +170,25 @@ async fn setup_database(settings: &DatabaseSettings) -> PgPool {
 /// Spawns the application server in a separate thread
 ///
 /// Returns a tuple containing the thread handle and a sender to signal for graceful shutdown.
-async fn spawn_app(app: TestApp) -> (JoinHandle<()>, oneshot::Sender<()>) {
+async fn spawn_app(
+    app_state: AppState,
+    listener: TcpListener,
+) -> (JoinHandle<()>, oneshot::Sender<()>) {
     let (close_tx, close_rx) = oneshot::channel();
 
-    let handle = std::thread::spawn(|| run_server(app, close_rx));
+    let handle = std::thread::spawn(|| run_server(app_state, listener, close_rx));
     (handle, close_tx)
 }
 
 /// Runs the application server with graceful shutdown support
-fn run_server(app: TestApp, close_rx: oneshot::Receiver<()>) {
-    let app_state = AppState {
-        app_settings: app.app_settings,
-        pg_pool: app.pg_pool,
-        redis_pool: app.redis_pool,
-    };
+fn run_server(app_state: AppState, listener: TcpListener, close_rx: oneshot::Receiver<()>) {
     let router = create_router(app_state);
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
     rt.block_on(async move {
-        axum::serve(app.listener, router)
+        axum::serve(listener, router)
             .with_graceful_shutdown(async move {
                 _ = close_rx.await;
             })

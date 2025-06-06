@@ -13,6 +13,7 @@ app = { path = "../app" }
 axum.workspace = true
 deadpool-redis.workspace = true
 infra = { path = "../infra" }
+reqwest = { version = "0.12", features = ["cookies", "json"] }
 secrecy.workspace = true
 settings = { path = "../settings" }
 sqlx.workspace = true

@@ -28,6 +28,7 @@ tracing.workspace = true
 tokio.workspace = true
 tower.workspace = true
 use_case = { path = "../use_case" }
+utils = { path = "../utils" }
 uuid.workspace = true
 
 [dev-dependencies]

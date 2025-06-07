@@ -1,16 +1,16 @@
-use std::{collections::HashMap, str::FromStr as _};
+use std::collections::HashMap;
 
 use cookie::{Cookie, SameSite};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 use settings::HttpProtocol;
 use sqlx::types::time::OffsetDateTime;
-use uuid::Uuid;
 
-use domain::{models::UserId, repositories::TokenType};
-use infra::http::{
-    COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, handler::user::UserResponseBody,
+use domain::{
+    models::{USER_ROLE_CODE, User},
+    repositories::TokenType,
 };
+use infra::http::{COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY};
 
 use crate::{
     helpers::{ResponseParts, split_response},
@@ -28,15 +28,16 @@ async fn integration_register_user_and_login_and_me() {
     let sign_up_requested_at = OffsetDateTime::now_utc();
     let sign_up_request_body = create_sign_up_request_body();
     let response = test_case.sign_up(&sign_up_request_body).await;
-    let response_body: UserResponseBody = response.json().await.unwrap();
-    assert_eq!(response_body.family_name, sign_up_request_body.family_name);
-    assert_eq!(response_body.given_name, sign_up_request_body.given_name);
-    assert_eq!(response_body.email, sign_up_request_body.email);
-    assert!(response_body.active);
-    assert!(response_body.last_login_at.is_none());
-    assert!((response_body.created_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
-    assert!((response_body.updated_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
-    let user_id = UserId::from(Uuid::from_str(&response_body.id).unwrap());
+    let user: User = response.json().await.unwrap();
+    assert_eq!(user.family_name.0, sign_up_request_body.family_name);
+    assert_eq!(user.given_name.0, sign_up_request_body.given_name);
+    assert_eq!(user.email.0, sign_up_request_body.email);
+    assert_eq!(user.role.code.0, USER_ROLE_CODE);
+    assert!(user.active);
+    assert!(user.last_login_at.is_none());
+    assert!((user.created_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
+    assert!((user.updated_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
+    let sign_up_user_id = user.id;
 
     // Log in with the new user
     let login_requested_at = OffsetDateTime::now_utc();
@@ -49,7 +50,7 @@ async fn integration_register_user_and_login_and_me() {
     } = split_response(response).await;
     assert!(status_code.is_success());
     // Check to ensure that logged in user information was updated
-    let user = test_case.user_by_id(user_id).await.unwrap();
+    let user = test_case.user_by_id(user.id).await.unwrap();
     assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
     assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
     // Check to ensure that the response body contains access and refresh tokens
@@ -59,14 +60,14 @@ async fn integration_register_user_and_login_and_me() {
         .token_content_by_token(&access_token)
         .await
         .unwrap();
-    assert_eq!(access_content.user_id, user_id);
+    assert_eq!(access_content.user_id, sign_up_user_id);
     assert_eq!(access_content.token_type, TokenType::Access);
     let refresh_token = SecretString::new(login_response_body.refresh_token.clone().into());
     let refresh_content = test_case
         .token_content_by_token(&refresh_token)
         .await
         .unwrap();
-    assert_eq!(refresh_content.user_id, user_id);
+    assert_eq!(refresh_content.user_id, sign_up_user_id);
     assert_eq!(refresh_content.token_type, TokenType::Refresh);
     // Check to ensure that access and refresh tokens are set in cookies
     let set_cookie_values = headers.get_all(reqwest::header::SET_COOKIE);
@@ -98,14 +99,14 @@ async fn integration_register_user_and_login_and_me() {
         status_code, body, ..
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK);
-    let response_body: UserResponseBody = serde_json::from_str(&body).unwrap();
-    assert_eq!(response_body.family_name, sign_up_request_body.family_name);
-    assert_eq!(response_body.given_name, sign_up_request_body.given_name);
-    assert_eq!(response_body.email, sign_up_request_body.email);
-    assert!(response_body.active);
-    assert!((response_body.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
-    assert!((login_requested_at - response_body.created_at).abs() < REQUEST_TIMEOUT);
-    assert!((response_body.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
+    let user: User = serde_json::from_str(&body).unwrap();
+    assert_eq!(user.family_name.0, sign_up_request_body.family_name);
+    assert_eq!(user.given_name.0, sign_up_request_body.given_name);
+    assert_eq!(user.email.0, sign_up_request_body.email);
+    assert!(user.active);
+    assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
+    assert!((login_requested_at - user.created_at).abs() < REQUEST_TIMEOUT);
+    assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
 
     test_case.end().await;
 }

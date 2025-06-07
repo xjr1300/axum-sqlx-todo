@@ -19,10 +19,8 @@ use domain::{
     repositories::{TokenTtlPair, UserInput, UserRepository},
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
+use utils::serde::serialize_secret_string;
 
-use super::{
-    deserialize_option_offset_datetime, serialize_option_offset_datetime, serialize_secret_string,
-};
 use crate::{
     AppState,
     http::{
@@ -56,46 +54,12 @@ impl TryFrom<SignUpRequestBody> for UserInput {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UserResponseBody {
-    pub id: String,
-    pub family_name: String,
-    pub given_name: String,
-    pub email: String,
-    pub active: bool,
-    #[serde(serialize_with = "serialize_option_offset_datetime")]
-    #[serde(deserialize_with = "deserialize_option_offset_datetime")]
-    pub last_login_at: Option<OffsetDateTime>,
-    #[serde(serialize_with = "rfc3339::serialize")]
-    #[serde(deserialize_with = "rfc3339::deserialize")]
-    pub created_at: OffsetDateTime,
-    #[serde(serialize_with = "rfc3339::serialize")]
-    #[serde(deserialize_with = "rfc3339::deserialize")]
-    pub updated_at: OffsetDateTime,
-}
-
-impl From<User> for UserResponseBody {
-    fn from(user: User) -> Self {
-        Self {
-            id: user.id.to_string(),
-            family_name: user.family_name.0,
-            given_name: user.given_name.0,
-            email: user.email.0,
-            active: user.active,
-            last_login_at: user.last_login_at,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-        }
-    }
-}
-
 /// サインアップハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn sign_up(
     State(app_state): State<AppState>,
     Json(request_body): Json<SignUpRequestBody>,
-) -> ApiResult<Json<UserResponseBody>> {
+) -> ApiResult<Json<User>> {
     // パスワードの検証とハッシュ化
     let raw_password = RawPassword::new(request_body.password.clone()).map_err(ApiError::from)?;
     let hashed_password = create_hashed_password(&app_state.app_settings.password, &raw_password)
@@ -110,8 +74,7 @@ pub async fn sign_up(
         .sign_up(input, hashed_password)
         .await
         .map_err(ApiError::from)?;
-    let response_body = UserResponseBody::from(user);
-    Ok(Json(response_body))
+    Ok(Json(user))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -360,7 +323,6 @@ fn login_failed_response() -> ApiError {
 }
 
 #[tracing::instrument]
-pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<UserResponseBody>> {
-    let response_body = UserResponseBody::from(user.0);
-    Ok(Json(response_body))
+pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<User>> {
+    Ok(Json(user.0))
 }

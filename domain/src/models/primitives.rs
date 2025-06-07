@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use garde::Validate as _;
+use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
 /// ID
@@ -28,6 +29,25 @@ impl<T> Id<T> {
 impl<T> From<Uuid> for Id<T> {
     fn from(uuid: Uuid) -> Self {
         Id(uuid, PhantomData)
+    }
+}
+
+impl<T> Serialize for Id<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, T> Deserialize<'de> for Id<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let uuid = Uuid::deserialize(deserializer)?;
+        Ok(Id(uuid, PhantomData))
     }
 }
 
@@ -74,6 +94,25 @@ macro_rules! impl_string_primitive {
                 &self.0
             }
         }
+
+        impl serde::ser::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where
+                S: serde::ser::Serializer,
+            {
+                serializer.serialize_str(&self.0)
+            }
+        }
+
+        impl<'de> serde::de::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value: String = String::deserialize(deserializer)?;
+                $name::new(value).map_err(serde::de::Error::custom)
+            }
+        }
     };
 }
 
@@ -105,6 +144,33 @@ macro_rules! impl_int_primitive {
 
             fn try_from(value: $ty) -> Result<Self, Self::Error> {
                 Self::new(value)
+            }
+        }
+
+        impl serde::ser::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+            where
+                S: serde::ser::Serializer,
+            {
+                match std::any::type_name_of_val(&self.0) {
+                    "i16" => serializer.serialize_i16(self.0),
+                    "i32" => serializer.serialize_i32(self.0 as i32),
+                    "i64" => serializer.serialize_i64(self.0 as i64),
+                    "u16" => serializer.serialize_u16(self.0 as u16),
+                    "u32" => serializer.serialize_u32(self.0 as u32),
+                    "u64" => serializer.serialize_u64(self.0 as u64),
+                    _ => Err(serde::ser::Error::custom("Unsupported integer type")),
+                }
+            }
+        }
+
+        impl<'de> serde::de::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value: $ty = <$ty>::deserialize(deserializer)?;
+                $name::new(value).map_err(serde::de::Error::custom)
             }
         }
     };

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS roles (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_roles PRIMARY KEY (code)
 );
+-- DO NOT CHANGE RECORDS BELOW
+-- If you need to change the records, you must fix role code constants.
 INSERT INTO roles (code, name, description, display_order) VALUES
     (1, '管理者', 'システム全体の管理を行う役割', 1),
     (2, 'ユーザー', '通常のユーザーとしての役割', 2);

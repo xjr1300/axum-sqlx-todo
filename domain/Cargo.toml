@@ -9,8 +9,10 @@ async-trait.workspace = true
 enum-display.workspace = true
 garde.workspace = true
 secrecy.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 time.workspace = true
+utils = { path = "../utils" }
 uuid.workspace = true
 
 [dev-dependencies]

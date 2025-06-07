@@ -3,7 +3,10 @@ use std::hash::Hash;
 
 use garde::Validate as _;
 use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+
+use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_datetime};
 
 use super::primitives::Id;
 use crate::{
@@ -181,7 +184,7 @@ pub struct AccessToken(pub SecretString);
 pub struct RefreshToken(pub SecretString);
 
 /// ユーザー
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     /// ID
     pub id: UserId,
@@ -196,10 +199,14 @@ pub struct User {
     /// アクティブフラグ
     pub active: bool,
     /// 最終ログイン日時
+    #[serde(serialize_with = "serialize_option_offset_datetime")]
+    #[serde(deserialize_with = "deserialize_option_offset_datetime")]
     pub last_login_at: Option<OffsetDateTime>,
     /// 作成日時
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     /// 更新日時
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -236,7 +243,8 @@ pub struct RoleDescription(#[garde(length(chars, min = 1, max = 255))] pub Strin
 impl_string_primitive!(RoleDescription);
 
 /// ロール
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Role {
     /// コード
     pub code: RoleCode,
@@ -247,10 +255,17 @@ pub struct Role {
     /// 表示順
     pub display_order: DisplayOrder,
     /// 作成日時
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     /// 更新日時
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
+
+/// 管理者ロールコード
+pub const ADMIN_ROLE_CODE: i16 = 1;
+/// ユーザーロールコード
+pub const USER_ROLE_CODE: i16 = 2;
 
 #[cfg(test)]
 mod tests {

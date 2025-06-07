@@ -68,7 +68,7 @@ where
         // ユーザーのログイン失敗履歴を取得
         let failed_history = self
             .user_repository
-            .get_login_failure_history(user_id)
+            .get_login_failed_history(user_id)
             .await?;
         match failed_history {
             Some(history) => {

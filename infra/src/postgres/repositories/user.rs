@@ -285,7 +285,7 @@ impl UserRepository for PgUserRepository {
     }
 
     /// ユーザーのログイン失敗履歴を取得する。
-    async fn get_login_failure_history(
+    async fn get_login_failed_history(
         &self,
         user_id: UserId,
     ) -> DomainResult<Option<LoginFailedHistory>> {
@@ -348,7 +348,10 @@ impl UserRepository for PgUserRepository {
         .map_err(repository_error)?;
         match affected_rows.rows_affected() {
             0 => user_not_found(user_id),
-            _ => Ok(()),
+            _ => {
+                tx.commit().await.map_err(repository_error)?;
+                Ok(())
+            }
         }
     }
 

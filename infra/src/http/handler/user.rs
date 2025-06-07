@@ -175,8 +175,8 @@ pub async fn login(
     // ユーザーのアクティブフラグを確認
     if !user.active {
         return Err(ApiError {
-            status_code: StatusCode::FORBIDDEN,
-            messages: vec![USER_NOT_ACTIVE.into()],
+            status_code: StatusCode::LOCKED,
+            messages: vec![USER_LOCKED.into()],
         });
     }
     // ユーザーのハッシュ化されたパスワードを取得
@@ -313,7 +313,7 @@ async fn handle_login_succeed(
 }
 
 const LOGIN_FAILED: &str = "Login failed. Please check your email and password";
-const USER_NOT_ACTIVE: &str = "User is not active";
+const USER_LOCKED: &str = "User is locked";
 
 fn login_failed_response() -> ApiError {
     ApiError {

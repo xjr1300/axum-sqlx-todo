@@ -23,7 +23,6 @@ use crate::{
 #[tokio::test]
 async fn integration_register_user_and_login_and_me() {
     let test_case = TestCase::begin(false).await;
-
     // Register a new user
     let sign_up_requested_at = OffsetDateTime::now_utc();
     let sign_up_request_body = create_sign_up_request_body();
@@ -107,22 +106,12 @@ async fn integration_register_user_and_login_and_me() {
     assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
     assert!((login_requested_at - user.created_at).abs() < REQUEST_TIMEOUT);
     assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
-
     test_case.end().await;
-}
-
-fn create_sign_up_request_body() -> RawSignUpRequestBody {
-    RawSignUpRequestBody {
-        family_name: String::from("Doe"),
-        given_name: String::from("John"),
-        email: String::from("john@example.com"),
-        password: String::from("ab12$%AB"),
-    }
 }
 
 /// Inspect that the cookie specification for access/refresh tokens is correct
 ///
-/// # 引数
+/// # Arguments
 ///
 /// * `cookie` - cookie that contains the access/refresh token
 /// * `expected_same_site` - expected `SameSite` attribute
@@ -155,4 +144,116 @@ fn inspect_token_cookie_spec(
         cookie.max_age().unwrap().whole_seconds(),
         "Cookie expiration mismatch"
     );
+}
+
+/// Ensure that entering an incorrect email address or password when logging in returns an error.
+/// And ensure that the login failed history is recorded correctly if the email address is correct but the password is incorrect.
+#[tokio::test]
+async fn integration_login_with_invalid_credentials() {
+    let test_case = TestCase::begin(false).await;
+    let request_body = create_sign_up_request_body();
+    let response = test_case.sign_up(&request_body).await;
+    let user: User = response.json().await.unwrap();
+    let request_body: RawLoginRequestBody = request_body.clone().into();
+
+    // Login with an wrong email address
+    let wrong_email = RawLoginRequestBody {
+        email: String::from("wrong@example.com"),
+        ..request_body.clone()
+    };
+    let response = test_case.login(&wrong_email).await;
+    let history = test_case.get_login_failed_history(user.id).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // No login failed history should be recorded if the email address is incorrect
+    assert!(history.is_none());
+
+    // Login with an wrong password
+    let attempted_at = OffsetDateTime::now_utc();
+    let wrong_password = RawLoginRequestBody {
+        password: String::from("Wr0ng_password"),
+        ..request_body.clone()
+    };
+    let response = test_case.login(&wrong_password).await;
+    let history = test_case.get_login_failed_history(user.id).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // A login failed history should be recorded if the email address is correct but the password is incorrect
+    assert_eq!(history.number_of_attempts, 1);
+    assert!((history.attempted_at - attempted_at).abs() < REQUEST_TIMEOUT);
+    test_case.end().await;
+}
+
+/// Ensure that the user are not locked even if the user fail to log in the maximum number of times allowed within the allowed time.
+#[tokio::test]
+async fn integration_user_not_locked_after_max_login_attempts() {
+    let test_case = TestCase::begin(false).await;
+    let request_body = create_sign_up_request_body();
+    let response = test_case.sign_up(&request_body).await;
+    let user: User = response.json().await.unwrap();
+    let correct_credential: RawLoginRequestBody = request_body.into();
+    let incorrect_credential = RawLoginRequestBody {
+        email: correct_credential.email.clone(),
+        password: String::from("ab13$%AB"),
+    };
+
+    // Attempt to log in with an incorrect password multiple times
+    for times in 0..test_case.app_state.app_settings.login.max_attempts {
+        let response = test_case.login(&incorrect_credential).await;
+        let history = test_case.get_login_failed_history(user.id).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(history.number_of_attempts, times + 1);
+    }
+    // Check that the user is still active
+    let user = test_case.user_by_id(user.id).await.unwrap();
+    assert!(
+        user.active,
+        "User should not be locked after max login attempts"
+    );
+    // The user log in successfully , if attempt to log in with the correct password
+    let response = test_case.login(&correct_credential).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    test_case.end().await;
+}
+
+/// Ensure that the user was locked after exceeding the maximum number of login attempts within the allowed time
+#[tokio::test]
+async fn integration_user_locked_after_exceeding_max_login_attempts() {
+    let test_case = TestCase::begin(false).await;
+    let request_body = create_sign_up_request_body();
+    let response = test_case.sign_up(&request_body).await;
+    let user: User = response.json().await.unwrap();
+    let correct_credential: RawLoginRequestBody = request_body.into();
+    let incorrect_credential = RawLoginRequestBody {
+        email: correct_credential.email.clone(),
+        password: String::from("ab13$%AB"),
+    };
+
+    // Attempt to log in with an incorrect password multiple times
+    for times in 0..=test_case.app_state.app_settings.login.max_attempts {
+        let response = test_case.login(&incorrect_credential).await;
+        let history = test_case.get_login_failed_history(user.id).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(history.number_of_attempts, times + 1);
+    }
+    // Check that the user is locked
+    let user = test_case.user_by_id(user.id).await.unwrap();
+    assert!(
+        !user.active,
+        "User should be locked after exceeding max login attempts"
+    );
+    // The user log in failed , if attempt to log in with the correct password
+    let response = test_case.login(&correct_credential).await;
+    assert_eq!(response.status(), StatusCode::LOCKED);
+    test_case.end().await;
+}
+
+// TODO: 最大ログイン試行時間内に、最大ログイン試行許容回数だけログインに失敗した後、最大ログイン試行時間後に正しいクレデンシャルでログインを試行したとき、ログインできることを確認
+// TODO: 最大ログイン試行時間内に、最大ログイン試行許容回数だけログインに失敗した後、最大ログイン試行時間後に異なるパスワードでログインを試行したとき、ログイン試行開始日時とログイン試行回数がリセットされることを確認
+
+fn create_sign_up_request_body() -> RawSignUpRequestBody {
+    RawSignUpRequestBody {
+        family_name: String::from("Doe"),
+        given_name: String::from("John"),
+        email: String::from("john@example.com"),
+        password: String::from("ab12$%AB"),
+    }
 }

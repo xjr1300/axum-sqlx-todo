@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use domain::{
-    models::{User, UserId},
+    models::{LoginFailedHistory, User, UserId},
     repositories::{TokenContent, TokenRepository, UserRepository},
 };
 use infra::{
@@ -88,6 +88,11 @@ impl TestCase {
     pub async fn user_by_id(&self, id: UserId) -> Option<User> {
         let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
         user_repo.by_id(id).await.unwrap()
+    }
+
+    pub async fn get_login_failed_history(&self, id: UserId) -> Option<LoginFailedHistory> {
+        let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
+        user_repo.get_login_failed_history(id).await.unwrap()
     }
 
     pub async fn token_content_by_token(&self, token: &SecretString) -> Option<TokenContent> {

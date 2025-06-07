@@ -55,7 +55,7 @@ pub trait UserRepository {
     ) -> DomainResult<LoginFailedHistory>;
 
     /// ユーザーのログイン失敗履歴を取得する。
-    async fn get_login_failure_history(
+    async fn get_login_failed_history(
         &self,
         user_id: UserId,
     ) -> DomainResult<Option<LoginFailedHistory>>;

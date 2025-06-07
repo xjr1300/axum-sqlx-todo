@@ -118,6 +118,11 @@ impl TestCase {
         let uri = format!("{}/users/login", self.origin());
         self.http_client.post(&uri).json(body).send().await.unwrap()
     }
+
+    pub async fn me(&self) -> reqwest::Response {
+        let uri = format!("{}/users/me", self.origin());
+        self.http_client.get(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr as _};
 
 use cookie::{Cookie, SameSite};
+use reqwest::StatusCode;
 use secrecy::SecretString;
 use settings::HttpProtocol;
 use sqlx::types::time::OffsetDateTime;
@@ -24,22 +25,22 @@ async fn integration_register_user_and_login_and_me() {
     let test_case = TestCase::begin(false).await;
 
     // Register a new user
-    let requested_at = OffsetDateTime::now_utc();
-    let request_body = create_signup_request_body();
-    let response = test_case.sign_up(&request_body).await;
+    let sign_up_requested_at = OffsetDateTime::now_utc();
+    let sign_up_request_body = create_sign_up_request_body();
+    let response = test_case.sign_up(&sign_up_request_body).await;
     let response_body: UserResponseBody = response.json().await.unwrap();
-    assert_eq!(response_body.family_name, request_body.family_name);
-    assert_eq!(response_body.given_name, request_body.given_name);
-    assert_eq!(response_body.email, request_body.email);
+    assert_eq!(response_body.family_name, sign_up_request_body.family_name);
+    assert_eq!(response_body.given_name, sign_up_request_body.given_name);
+    assert_eq!(response_body.email, sign_up_request_body.email);
     assert!(response_body.active);
     assert!(response_body.last_login_at.is_none());
-    assert!(response_body.created_at >= requested_at);
-    assert!(response_body.updated_at >= requested_at);
+    assert!((response_body.created_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
+    assert!((response_body.updated_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);
     let user_id = UserId::from(Uuid::from_str(&response_body.id).unwrap());
 
     // Log in with the new user
-    let requested_at = OffsetDateTime::now_utc();
-    let request_body: RawLoginRequestBody = request_body.into();
+    let login_requested_at = OffsetDateTime::now_utc();
+    let request_body: RawLoginRequestBody = sign_up_request_body.clone().into();
     let response = test_case.login(&request_body).await;
     let ResponseParts {
         status_code,
@@ -47,9 +48,11 @@ async fn integration_register_user_and_login_and_me() {
         body,
     } = split_response(response).await;
     assert!(status_code.is_success());
+    // Check to ensure that logged in user information was updated
     let user = test_case.user_by_id(user_id).await.unwrap();
-    assert!(user.last_login_at.unwrap() - requested_at < REQUEST_TIMEOUT);
-    assert!(user.updated_at - requested_at < REQUEST_TIMEOUT);
+    assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
+    assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
+    // Check to ensure that the response body contains access and refresh tokens
     let login_response_body = serde_json::from_str::<RawLoginResponseBody>(&body).unwrap();
     let access_token = SecretString::new(login_response_body.access_token.clone().into());
     let access_content = test_case
@@ -89,10 +92,25 @@ async fn integration_register_user_and_login_and_me() {
         test_case.app_state.app_settings.token.refresh_max_age,
     );
 
+    // Retrieve the user information
+    let response = test_case.me().await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::OK);
+    let response_body: UserResponseBody = serde_json::from_str(&body).unwrap();
+    assert_eq!(response_body.family_name, sign_up_request_body.family_name);
+    assert_eq!(response_body.given_name, sign_up_request_body.given_name);
+    assert_eq!(response_body.email, sign_up_request_body.email);
+    assert!(response_body.active);
+    assert!((response_body.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
+    assert!((login_requested_at - response_body.created_at).abs() < REQUEST_TIMEOUT);
+    assert!((response_body.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
+
     test_case.end().await;
 }
 
-fn create_signup_request_body() -> RawSignUpRequestBody {
+fn create_sign_up_request_body() -> RawSignUpRequestBody {
     RawSignUpRequestBody {
         family_name: String::from("Doe"),
         given_name: String::from("John"),

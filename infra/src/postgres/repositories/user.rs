@@ -5,7 +5,10 @@ use uuid::Uuid;
 
 use domain::{
     DomainError, DomainErrorKind, DomainResult,
-    models::{Email, LoginFailedHistory, PHCString, User, UserId},
+    models::{
+        Email, LoginFailedHistory, PHCString, Role, RoleCode, RoleName, User, UserId,
+        primitives::{Description, DisplayOrder},
+    },
     repositories::{UserInput, UserRepository},
 };
 
@@ -21,14 +24,23 @@ impl UserRepository for PgUserRepository {
         let row = sqlx::query_as!(
             UserRow,
             r#"
-            INSERT INTO users (
-                family_name, given_name, email, hashed_password, active,
-                last_login_at, created_at, updated_at
+            WITH inserted AS (
+                INSERT INTO users (
+                    family_name, given_name, email, hashed_password, active,
+                    last_login_at, created_at, updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING
+                    id, family_name, given_name, email, role_code,
+                    active, last_login_at, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
+            SELECT
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM inserted u
+            INNER JOIN roles r ON u.role_code = r.code
             "#,
             user.family_name.0,
             user.given_name.0,
@@ -54,10 +66,13 @@ impl UserRepository for PgUserRepository {
             UserRow,
             r#"
             SELECT
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
-            FROM users
-            WHERE id = $1
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM users u
+            INNER JOIN roles r ON u.role_code = r.code
+            WHERE u.id = $1
             "#,
             id.0
         )
@@ -73,9 +88,12 @@ impl UserRepository for PgUserRepository {
             UserRow,
             r#"
             SELECT
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
-            FROM users
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM users u
+            INNER JOIN roles r ON u.role_code = r.code
             WHERE email = $1
             "#,
             email.0
@@ -92,16 +110,25 @@ impl UserRepository for PgUserRepository {
         let row = sqlx::query_as!(
             UserRow,
             r#"
-            UPDATE users
-            SET
-                family_name = $1,
-                given_name = $2,
-                email = $3,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $4
-            RETURNING
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
+            WITH updated AS (
+                UPDATE users
+                SET
+                    family_name = $1,
+                    given_name = $2,
+                    email = $3,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $4
+                RETURNING
+                    id, family_name, given_name, email, role_code, active,
+                    last_login_at, created_at, updated_at
+            )
+            SELECT
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM updated u
+            INNER JOIN roles r ON u.role_code = r.code
             "#,
             user.family_name.0,
             user.given_name.0,
@@ -127,14 +154,23 @@ impl UserRepository for PgUserRepository {
         let row = sqlx::query_as!(
             UserRow,
             r#"
-            UPDATE users
-            SET
-                last_login_at = $1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-            RETURNING
-                id, family_name, given_name, email, active, last_login_at,
-                created_at, updated_at
+            WITH updated AS (
+                UPDATE users
+                SET
+                    last_login_at = $1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $2
+                RETURNING
+                    id, family_name, given_name, email, role_code,
+                    active, last_login_at, created_at, updated_at
+            )
+            SELECT
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM updated u
+            INNER JOIN roles r ON u.role_code = r.code
             "#,
             logged_in_at,
             id.0
@@ -366,6 +402,12 @@ struct UserRow {
     family_name: String,
     given_name: String,
     email: String,
+    role_code: i16,
+    role_name: String,
+    role_description: Option<String>,
+    role_display_order: i16,
+    role_created_at: OffsetDateTime,
+    role_updated_at: OffsetDateTime,
     active: bool,
     last_login_at: Option<OffsetDateTime>,
     created_at: OffsetDateTime,
@@ -381,6 +423,14 @@ impl TryFrom<UserRow> for User {
             family_name: row.family_name.try_into()?,
             given_name: row.given_name.try_into()?,
             email: row.email.try_into()?,
+            role: Role {
+                code: RoleCode(row.role_code),
+                name: RoleName::new(row.role_name)?,
+                description: row.role_description.map(Description::new).transpose()?,
+                display_order: DisplayOrder(row.role_display_order),
+                created_at: row.role_created_at,
+                updated_at: row.role_updated_at,
+            },
             active: row.active,
             last_login_at: row.last_login_at,
             created_at: row.created_at,

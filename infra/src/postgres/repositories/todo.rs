@@ -1,6 +1,6 @@
 use domain::{
     DomainError, DomainErrorKind, DomainResult,
-    models::{Todo, TodoId, TodoStatus, TodoStatusCode, TodoStatusName, User, UserId},
+    models::{Role, Todo, TodoId, TodoStatus, User, UserId, primitives::DisplayOrder},
     repositories::{TodoCreate, TodoRepository, TodoUpdate},
 };
 use sqlx::PgTransaction;
@@ -17,14 +17,24 @@ struct TodoRow {
     family_name: String,
     given_name: String,
     email: String,
+    role_code: i16,
+    role_name: String,
+    role_description: Option<String>,
+    role_display_order: i16,
+    role_created_at: OffsetDateTime,
+    role_updated_at: OffsetDateTime,
     active: bool,
     last_login_at: Option<OffsetDateTime>,
     user_created_at: OffsetDateTime,
     user_updated_at: OffsetDateTime,
     title: String,
     description: Option<String>,
-    todo_status_code: i32,
+    todo_status_code: i16,
     todo_status_name: String,
+    todo_description: Option<String>,
+    todo_display_order: i16,
+    todo_created_at: OffsetDateTime,
+    todo_updated_at: OffsetDateTime,
     completed_at: Option<OffsetDateTime>,
     archived: bool,
     created_at: OffsetDateTime,
@@ -40,14 +50,26 @@ impl TryFrom<TodoRow> for Todo {
             family_name: row.family_name.try_into()?,
             given_name: row.given_name.try_into()?,
             email: row.email.try_into()?,
+            role: Role {
+                code: row.role_code.try_into()?,
+                name: row.role_name.try_into()?,
+                description: row.role_description.map(|d| d.try_into()).transpose()?,
+                display_order: row.role_display_order.try_into()?,
+                created_at: row.role_created_at,
+                updated_at: row.role_updated_at,
+            },
             active: row.active,
             last_login_at: row.last_login_at,
             created_at: row.user_created_at,
             updated_at: row.user_updated_at,
         };
         let status = TodoStatus {
-            code: TodoStatusCode(row.todo_status_code),
-            name: TodoStatusName(row.todo_status_name),
+            code: row.todo_status_code.try_into()?,
+            name: row.todo_status_name.try_into()?,
+            description: row.todo_description.map(|d| d.try_into()).transpose()?,
+            display_order: DisplayOrder(row.todo_display_order),
+            created_at: row.todo_created_at,
+            updated_at: row.todo_updated_at,
         };
 
         Todo::new(
@@ -72,7 +94,7 @@ impl TodoRepository for PgTodoRepository {
         let row = sqlx::query_as!(
             TodoRow,
             r#"
-            WITH todo AS (
+            WITH inserted AS (
                 INSERT INTO todos (
                     user_id, title, description, completed_at, created_at, updated_at
                 ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -82,14 +104,17 @@ impl TodoRepository for PgTodoRepository {
             )
             SELECT
                 t.id, t.user_id,
-                u.family_name, u.given_name, u.email, u.active,
-                u.last_login_at,
-                u.created_at user_created_at, u.updated_at user_updated_at,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
+                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
                 t.completed_at, t.archived, t.created_at, t.updated_at
-            FROM todo t
+            FROM inserted t
             INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
             todo.user_id.0,
@@ -109,15 +134,18 @@ impl TodoRepository for PgTodoRepository {
             TodoRow,
             r#"
             SELECT
-                t.id,
-                u.id user_id, u.family_name, u.given_name, u.email, u.active,
-                u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
+                t.id, t.user_id,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
+                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
                 t.completed_at, t.archived, t.created_at, t.updated_at
-            FROM
-                todos t
+            FROM todos t
             INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             WHERE t.id = $1
             "#,
@@ -135,7 +163,7 @@ impl TodoRepository for PgTodoRepository {
         let row = sqlx::query_as!(
             TodoRow,
             r#"
-            WITH todo AS (
+            WITH updated AS (
                 UPDATE todos
                 SET
                     title = $1,
@@ -151,13 +179,17 @@ impl TodoRepository for PgTodoRepository {
             )
             SELECT
                 t.id, t.user_id,
-                u.family_name, u.given_name, u.email, u.active,
-                u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
+                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
                 t.completed_at, t.archived, t.created_at, t.updated_at
-            FROM todo t
+            FROM updated t
             INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
             todo.title.0,
@@ -182,7 +214,7 @@ impl TodoRepository for PgTodoRepository {
         let row = sqlx::query_as!(
             TodoRow,
             r#"
-            WITH todo AS (
+            WITH updated AS (
                 UPDATE todos
                 SET
                     completed_at = CURRENT_TIMESTAMP,
@@ -195,13 +227,17 @@ impl TodoRepository for PgTodoRepository {
             )
             SELECT
                 t.id, t.user_id,
-                u.family_name, u.given_name, u.email, u.active,
-                u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
+                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
                 t.completed_at, t.archived, t.created_at, t.updated_at
-            FROM todo t
+            FROM updated t
             INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
             id.0
@@ -221,7 +257,7 @@ impl TodoRepository for PgTodoRepository {
         let row = sqlx::query_as!(
             TodoRow,
             r#"
-            WITH todo AS (
+            WITH updated AS (
                 UPDATE todos
                 SET
                     archived = $1,
@@ -234,13 +270,17 @@ impl TodoRepository for PgTodoRepository {
             )
             SELECT
                 t.id, t.user_id,
-                u.family_name, u.given_name, u.email, u.active,
-                u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
+                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
                 t.completed_at, t.archived, t.created_at, t.updated_at
-            FROM todo t
+            FROM updated t
             INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
             archived,

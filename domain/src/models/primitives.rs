@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use garde::Validate as _;
 use uuid::Uuid;
 
 /// ID
@@ -77,10 +78,10 @@ macro_rules! impl_string_primitive {
 }
 
 #[macro_export]
-macro_rules! impl_i32_primitive {
-    ($name:ident) => {
+macro_rules! impl_int_primitive {
+    ($name:ident, $ty:ty) => {
         impl $name {
-            pub fn new(value: i32) -> $crate::DomainResult<Self> {
+            pub fn new(value: $ty) -> $crate::DomainResult<Self> {
                 let value = Self(value);
                 match value.validate() {
                     Ok(_) => Ok(value),
@@ -99,20 +100,29 @@ macro_rules! impl_i32_primitive {
             }
         }
 
-        impl std::convert::TryFrom<i32> for $name {
+        impl std::convert::TryFrom<$ty> for $name {
             type Error = $crate::DomainError;
 
-            fn try_from(value: i32) -> Result<Self, Self::Error> {
+            fn try_from(value: $ty) -> Result<Self, Self::Error> {
                 Self::new(value)
             }
         }
     };
 }
 
+/// 説明
+#[derive(Debug, Clone, garde::Validate)]
+pub struct Description(#[garde(length(chars, min = 1, max = 255))] pub String);
+impl_string_primitive!(Description);
+
+/// 表示順
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, garde::Validate)]
+pub struct DisplayOrder(#[garde(range(min=1,max=i16::MAX))] pub i16);
+impl_int_primitive!(DisplayOrder, i16);
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use garde::Validate as _;
 
     #[test]
     fn id_default() {

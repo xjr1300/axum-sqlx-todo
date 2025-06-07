@@ -10,3 +10,6 @@ DROP TABLE IF EXISTS login_failed_histories;
 -- table: users
 DROP INDEX IF EXISTS idx_users_email;
 DROP TABLE IF EXISTS users;
+
+-- tables: roles
+DROP TABLE IF EXISTS roles;

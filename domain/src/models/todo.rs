@@ -1,10 +1,10 @@
 use garde::Validate as _;
 use time::OffsetDateTime;
 
-use crate::models::primitives::Id;
+use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
 use crate::{
-    DomainError, DomainErrorKind, DomainResult, impl_i32_primitive, impl_string_primitive,
+    DomainError, DomainErrorKind, DomainResult, impl_int_primitive, impl_string_primitive,
 };
 
 /// Todo ID
@@ -22,8 +22,8 @@ impl_string_primitive!(TodoDescription);
 
 /// Todo状態コード
 #[derive(Debug, Clone, PartialEq, Eq, Hash, garde::Validate)]
-pub struct TodoStatusCode(#[garde(range(min=1, max=i32::MAX))] pub i32);
-impl_i32_primitive!(TodoStatusCode);
+pub struct TodoStatusCode(#[garde(range(min=1, max=i16::MAX))] pub i16);
+impl_int_primitive!(TodoStatusCode, i16);
 
 /// Todo状態名
 #[derive(Debug, Clone, garde::Validate)]
@@ -134,12 +134,23 @@ pub struct TodoStatus {
     pub code: TodoStatusCode,
     /// Todo状態名
     pub name: TodoStatusName,
+    /// Todo状態の説明
+    pub description: Option<Description>,
+    /// Todo状態の順序
+    pub display_order: DisplayOrder,
+    /// Todo状態の作成日時
+    pub created_at: OffsetDateTime,
+    /// Todo状態の更新日時
+    pub updated_at: OffsetDateTime,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::user::{Email, FamilyName, GivenName, UserId};
+    use crate::models::{
+        Role, RoleCode, RoleName,
+        user::{Email, FamilyName, GivenName, UserId},
+    };
     use time::macros::datetime;
     use uuid::Uuid;
 
@@ -149,6 +160,14 @@ mod tests {
             family_name: FamilyName::new(String::from("Doe")).unwrap(),
             given_name: GivenName::new(String::from("John")).unwrap(),
             email: Email::new(String::from("doe@example.com")).unwrap(),
+            role: Role {
+                code: RoleCode(1),
+                name: RoleName("管理者".to_string()),
+                description: None,
+                display_order: DisplayOrder(1),
+                created_at: OffsetDateTime::now_utc(),
+                updated_at: OffsetDateTime::now_utc(),
+            },
             active: true,
             last_login_at: None,
             created_at: OffsetDateTime::now_utc(),
@@ -166,6 +185,10 @@ mod tests {
         let status = TodoStatus {
             code: TodoStatusCode(1),
             name: TodoStatusName("未着手".to_string()),
+            description: None,
+            display_order: DisplayOrder(1),
+            created_at: OffsetDateTime::now_utc(),
+            updated_at: OffsetDateTime::now_utc(),
         };
         let completed_at = None;
         let created_at = OffsetDateTime::now_utc();
@@ -221,6 +244,10 @@ mod tests {
         let status = TodoStatus {
             code: TodoStatusCode(1),
             name: TodoStatusName("未着手".to_string()),
+            description: None,
+            display_order: DisplayOrder(1),
+            created_at: OffsetDateTime::now_utc(),
+            updated_at: OffsetDateTime::now_utc(),
         };
 
         let result = Todo::new(

@@ -1,5 +1,19 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- table: roles
+CREATE TABLE IF NOT EXISTS roles (
+    code SMALLINT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    description VARCHAR(255),
+    display_order SMALLINT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_roles PRIMARY KEY (code)
+);
+INSERT INTO roles (code, name, description, display_order) VALUES
+    (1, '管理者', 'システム全体の管理を行う役割', 1),
+    (2, 'ユーザー', '通常のユーザーとしての役割', 2);
+
 -- table: users
 CREATE TABLE IF NOT EXISTS users (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -7,11 +21,13 @@ CREATE TABLE IF NOT EXISTS users (
     given_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
+    role_code SMALLINT NOT NULL DEFAULT 2,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_users PRIMARY KEY (id)
+    CONSTRAINT pk_users PRIMARY KEY (id),
+    CONSTRAINT fk_users_role FOREIGN KEY (role_code) REFERENCES roles (code) ON DELETE RESTRICT
 );
 
 CREATE UNIQUE index if NOT EXISTS idx_users_email ON users (email);
@@ -29,17 +45,20 @@ CREATE TABLE IF NOT EXISTS login_failed_histories (
 
 -- table: todo_statuses
 CREATE TABLE IF NOT EXISTS todo_statuses (
-    code INTEGER NOT NULL,
+    code SMALLINT NOT NULL,
     name VARCHAR(50) NOT NULL,
+    description VARCHAR(255),
+    display_order SMALLINT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_todo_statuses PRIMARY KEY (code)
 );
-
-INSERT INTO todo_statuses (code, name) VALUES
-    (1, '未着手'),
-    (2, '進行中'),
-    (3, '完了'),
-    (4, '中止'),
-    (5, '保留');
+INSERT INTO todo_statuses (code, name, description, display_order) VALUES
+    (1, '未着手', 'タスクがまだ開始されていない状態', 1),
+    (2, '進行中', 'タスクが現在進行中の状態', 2),
+    (3, '完了', 'タスクが完了した状態', 3),
+    (4, '中止', 'タスクが中止された状態', 4),
+    (5, '保留', 'タスクが一時的に保留されている状態', 5);
 
 -- table: todos
 CREATE TABLE IF NOT EXISTS todos (
@@ -47,7 +66,7 @@ CREATE TABLE IF NOT EXISTS todos (
     user_id uuid NOT NULL,
     title VARCHAR(100) NOT NULL,
     description VARCHAR(400),
-    todo_status_code INTEGER NOT NULL DEFAULT 1,
+    todo_status_code SMALLINT NOT NULL DEFAULT 1,
     completed_at TIMESTAMP WITH TIME ZONE,
     archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,

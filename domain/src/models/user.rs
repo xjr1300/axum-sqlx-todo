@@ -7,7 +7,8 @@ use time::OffsetDateTime;
 
 use super::primitives::Id;
 use crate::{
-    DomainError, DomainErrorKind, DomainResult, impl_string_primitive,
+    DomainError, DomainErrorKind, DomainResult, impl_int_primitive, impl_string_primitive,
+    models::primitives::{Description, DisplayOrder},
     starts_or_ends_with_whitespace,
 };
 
@@ -190,6 +191,8 @@ pub struct User {
     pub given_name: GivenName,
     /// Eメールアドレス
     pub email: Email,
+    /// ロール
+    pub role: Role,
     /// アクティブフラグ
     pub active: bool,
     /// 最終ログイン日時
@@ -211,6 +214,38 @@ pub struct LoginFailedHistory {
     pub number_of_attempts: u32,
     /// 最初に試行に失敗した日時
     pub attempted_at: OffsetDateTime,
+    /// 作成日時
+    pub created_at: OffsetDateTime,
+    /// 更新日時
+    pub updated_at: OffsetDateTime,
+}
+
+/// ロールコード
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, garde::Validate)]
+pub struct RoleCode(#[garde(range(min = 1, max=i16::MAX))] pub i16);
+impl_int_primitive!(RoleCode, i16);
+
+/// ロール名
+#[derive(Debug, Clone, garde::Validate)]
+pub struct RoleName(#[garde(length(chars, min = 1, max = 50))] pub String);
+impl_string_primitive!(RoleName);
+
+/// ロール説明
+#[derive(Debug, Clone, garde::Validate)]
+pub struct RoleDescription(#[garde(length(chars, min = 1, max = 255))] pub String);
+impl_string_primitive!(RoleDescription);
+
+/// ロール
+#[derive(Debug, Clone)]
+pub struct Role {
+    /// コード
+    pub code: RoleCode,
+    /// 名称
+    pub name: RoleName,
+    /// 説明
+    pub description: Option<Description>,
+    /// 表示順
+    pub display_order: DisplayOrder,
     /// 作成日時
     pub created_at: OffsetDateTime,
     /// 更新日時

@@ -1,7 +1,8 @@
 mod helpers;
+mod test_case;
 mod user;
 
-use crate::helpers::TestCase;
+use crate::test_case::TestCase;
 
 #[tokio::test]
 async fn integration_health_check() {

@@ -11,12 +11,14 @@ use infra::http::{
     COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, handler::user::UserResponseBody,
 };
 
-use crate::helpers::{
-    REQUEST_TIMEOUT, RawLoginRequestBody, RawLoginResponseBody, RawSignUpRequestBody,
-    ResponseParts, TestCase, split_response,
+use crate::{
+    helpers::{ResponseParts, split_response},
+    test_case::{
+        REQUEST_TIMEOUT, RawLoginRequestBody, RawLoginResponseBody, RawSignUpRequestBody, TestCase,
+    },
 };
 
-/// Test case for user registration, login, and fetching user info
+/// Ensure that a user can register, log in, and retrieve their information
 #[tokio::test]
 async fn integration_register_user_and_login_and_me() {
     let test_case = TestCase::begin(false).await;
@@ -63,7 +65,7 @@ async fn integration_register_user_and_login_and_me() {
         .unwrap();
     assert_eq!(refresh_content.user_id, user_id);
     assert_eq!(refresh_content.token_type, TokenType::Refresh);
-    // クッキーにアクセストークンとリフレッシュトークンが設定されていることを確認する
+    // Check to ensure that access and refresh tokens are set in cookies
     let set_cookie_values = headers.get_all(reqwest::header::SET_COOKIE);
     let mut set_cookies: HashMap<String, Cookie> = HashMap::new();
     for value in set_cookie_values {
@@ -99,15 +101,15 @@ fn create_signup_request_body() -> RawSignUpRequestBody {
     }
 }
 
-/// アクセス／リフレッシュトークン保存するクッキーの仕様を確認する。
+/// Inspect that the cookie specification for access/refresh tokens is correct
 ///
 /// # 引数
 ///
-/// * `cookie` - アクセス／リフレッシュトークンを保存するクッキー
-/// * `expected_same_site` - 予期する`SameSite`の値
-/// * `expected_secure` - `Secure`を設定するかを示すフラグ
-/// * `expected_http_only` - `HttpOnly`を設定するかを示すフラグ
-/// * `expected_max_age` - アクセス／リフレッシュトークンの有効期限（秒）
+/// * `cookie` - cookie that contains the access/refresh token
+/// * `expected_same_site` - expected `SameSite` attribute
+/// * `expected_secure` - expected `Secure` attribute`
+/// * `expected_http_only` - expected `HttpOnly` attribute
+/// * `expected_max_age` - expected `MaxAge` for access/refresh token
 fn inspect_token_cookie_spec(
     cookie: &Cookie<'_>,
     expected_same_site: SameSite,

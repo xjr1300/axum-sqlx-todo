@@ -1,5 +1,4 @@
 use secrecy::{ExposeSecret as _, SecretString};
-use sqlx::PgTransaction;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -57,7 +56,8 @@ impl UserRepository for PgUserRepository {
                 .push("The email address might already be in use".into());
             e
         })?;
-        user_commit(tx, row).await
+        commit(tx).await?;
+        User::try_from(row)
     }
 
     /// ユーザーをIDで取得する。
@@ -139,7 +139,10 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(repository_error)?;
         match row {
-            Some(row) => user_commit(tx, row).await,
+            Some(row) => {
+                commit(tx).await?;
+                User::try_from(row)
+            }
             None => user_not_found(id),
         }
     }
@@ -179,7 +182,10 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(repository_error)?;
         match row {
-            Some(row) => user_commit(tx, row).await,
+            Some(row) => {
+                commit(tx).await?;
+                User::try_from(row)
+            }
             None => user_not_found(id),
         }
     }
@@ -285,7 +291,7 @@ impl UserRepository for PgUserRepository {
     }
 
     /// ユーザーのログイン失敗履歴を取得する。
-    async fn get_login_failure_history(
+    async fn get_login_failed_history(
         &self,
         user_id: UserId,
     ) -> DomainResult<Option<LoginFailedHistory>> {
@@ -305,51 +311,53 @@ impl UserRepository for PgUserRepository {
         .map(LoginFailedHistory::from))
     }
 
-    /// ユーザーのアクティブ状態と、ユーザーの連続ログイン試行回数を更新する。
-    async fn update_active_and_number_of_attempts(
+    /// ユーザーのログイン試行回数をインクリメントする。
+    ///
+    /// ユーザーのログイン試行回数をインクリメントして、インクリメント後のログイン試行回数が、最大ログイン試行回数を超えた
+    /// 場合は、ユーザーをロックする。
+    async fn increment_number_of_login_attempts(
         &self,
         user_id: UserId,
-        active: bool,
-        number_of_attempts: i32,
+        max_attempts: u32,
     ) -> DomainResult<()> {
         let mut tx = self.begin().await?;
-        // ユーザーのアクティブ状態を更新
-        let affected_rows = sqlx::query!(
-            r#"
-            UPDATE users
-            SET
-                active = $1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-            "#,
-            active,
-            user_id.0
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(repository_error)?;
-        if affected_rows.rows_affected() == 0 {
-            return user_not_found(user_id);
-        }
-        // ユーザーのログイン失敗履歴を更新
-        let affected_rows = sqlx::query!(
+        // ユーザーのログイン試行回数をインクリメント
+        sqlx::query!(
             r#"
             UPDATE login_failed_histories
             SET
-                number_of_attempts = $1,
+                number_of_attempts = number_of_attempts + 1,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $2
+            WHERE user_id = $1
             "#,
-            number_of_attempts,
             user_id.0
         )
         .execute(&mut *tx)
         .await
         .map_err(repository_error)?;
-        match affected_rows.rows_affected() {
-            0 => user_not_found(user_id),
-            _ => Ok(()),
-        }
+
+        // ユーザーのログイン試行回数が最大ログイン試行回数を超えた場合は、ユーザーをロッユ
+        sqlx::query!(
+            r#"
+            UPDATE users
+            SET
+                active = FALSE,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+                AND (
+                    SELECT number_of_attempts
+                    FROM login_failed_histories
+                    WHERE user_id = $1
+                ) > $2
+            "#,
+            user_id.0,
+            max_attempts as i32,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        tx.commit().await.map_err(repository_error)?;
+        Ok(())
     }
 
     /// ユーザーのログイン失敗履歴をリセットする。
@@ -378,14 +386,12 @@ impl UserRepository for PgUserRepository {
         .map_err(repository_error)?;
         match affected_rows.rows_affected() {
             0 => user_not_found(user_id),
-            _ => Ok(()),
+            _ => {
+                tx.commit().await.map_err(repository_error)?;
+                Ok(())
+            }
         }
     }
-}
-
-async fn user_commit(tx: PgTransaction<'_>, row: UserRow) -> DomainResult<User> {
-    commit(tx).await?;
-    User::try_from(row)
 }
 
 fn user_not_found<T>(id: UserId) -> DomainResult<T> {

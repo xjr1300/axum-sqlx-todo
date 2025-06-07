@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -x
+#set -x
 set -eo pipefail
 
 DB_USER="${POSTGRES_DATABASE__USER:=todo}"
@@ -14,11 +14,7 @@ TEST_DB_PREFIX="test_todo_db_"
 export PGPASSWORD="${DB_PASSWORD}"
 mapfile -t TEST_DBS < <(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -P "pager=off" -c "\l" | grep "${TEST_DB_PREFIX}" | cut -d "|" -f 1 | tr -d ' ')
 
-for TEST_DB in "${TEST_DBS[@]}"; do
-    echo "Dropping database: ${TEST_DB}"
-done
-
 # 統合テスト用のデータベースを削除
 for TEST_DB in "${TEST_DBS[@]}"; do
-    psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -c "DROP DATABASE ${TEST_DB};"
+    psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -c "DROP DATABASE ${TEST_DB};" >/dev/null
 done

@@ -55,17 +55,16 @@ pub trait UserRepository {
     ) -> DomainResult<LoginFailedHistory>;
 
     /// ユーザーのログイン失敗履歴を取得する。
-    async fn get_login_failure_history(
+    async fn get_login_failed_history(
         &self,
         user_id: UserId,
     ) -> DomainResult<Option<LoginFailedHistory>>;
 
     /// ユーザーのアクティブ状態と、ユーザーの連続ログイン試行回数を更新する。
-    async fn update_active_and_number_of_attempts(
+    async fn increment_number_of_login_attempts(
         &self,
         user_id: UserId,
-        active: bool,
-        number_of_attempts: i32,
+        max_attempts: u32,
     ) -> DomainResult<()>;
 
     /// ユーザーのログイン失敗履歴をリセットする。

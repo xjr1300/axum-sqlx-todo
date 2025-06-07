@@ -68,7 +68,7 @@ where
         // ユーザーのログイン失敗履歴を取得
         let failed_history = self
             .user_repository
-            .get_login_failure_history(user_id)
+            .get_login_failed_history(user_id)
             .await?;
         match failed_history {
             Some(history) => {
@@ -81,14 +81,8 @@ where
                     そして、新しいログイン試行回数が、連続ログイン試行許容回数を超えば場合は、
                     ユーザーのアクティブフラグを無効にする。
                      */
-                    let new_attempts = history.number_of_attempts + 1;
-                    let new_active = new_attempts <= max_attempts;
                     self.user_repository
-                        .update_active_and_number_of_attempts(
-                            user_id,
-                            new_active,
-                            new_attempts as i32,
-                        )
+                        .increment_number_of_login_attempts(user_id, max_attempts)
                         .await?;
                 } else {
                     /*

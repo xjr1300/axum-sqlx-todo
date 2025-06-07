@@ -1,11 +1,26 @@
+//! This module sets up and runs integration tests
+//!
+//! The integration test uses the same PostgreSQL container as the development environment.
+//! But, it creates a separate test database for integration tests.
+//! The test database is named in the format `test_todo_db_<uuid>`,
+//! where `<uuid>` is the UUID with hyphens replaced by underscores.
+//!
+//! The integration test uses the same Redis container as the development environment,
+//! because the access tokens and refresh tokens are highly random.
+//!
+//! [NOTICE]
+//!
+//! A test database is created for each test run.
+//! So you must run the `bin/drop_test_dbs.sh` script to drop all the test databases.
 use std::{thread::JoinHandle, time::Duration};
 
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use settings::AppSettings;
 use tokio::sync::oneshot;
 
 use domain::{
-    models::{User, UserId},
+    models::{LoginFailedHistory, User, UserId},
     repositories::{TokenContent, TokenRepository, UserRepository},
 };
 use infra::{
@@ -48,8 +63,8 @@ pub struct TestCase {
 }
 
 impl TestCase {
-    pub async fn begin(log: bool) -> Self {
-        let app = configure_test_app().await;
+    pub async fn begin(app_settings: AppSettings, log: bool) -> Self {
+        let app = configure_test_app(app_settings).await;
         let TestApp {
             app_settings,
             listener,
@@ -76,6 +91,20 @@ impl TestCase {
         }
     }
 
+    pub async fn end(self) {
+        if self.log {
+            println!("Sending graceful shutdown signal...");
+        }
+        self.shutdown_signal.send(()).unwrap();
+        if self.log {
+            println!("Waiting for server to gracefully shutdown...");
+        }
+        self.app_handle.join().unwrap();
+        if self.log {
+            println!("Server has gracefully shutdown.");
+        }
+    }
+
     pub fn origin(&self) -> String {
         format!(
             "{}://{}:{}",
@@ -90,23 +119,14 @@ impl TestCase {
         user_repo.by_id(id).await.unwrap()
     }
 
+    pub async fn get_login_failed_history(&self, id: UserId) -> Option<LoginFailedHistory> {
+        let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
+        user_repo.get_login_failed_history(id).await.unwrap()
+    }
+
     pub async fn token_content_by_token(&self, token: &SecretString) -> Option<TokenContent> {
         let token_repo = RedisTokenRepository::new(self.app_state.redis_pool.clone());
         token_repo.get_token_content(token).await.unwrap()
-    }
-
-    pub async fn end(self) {
-        if self.log {
-            println!("Sending graceful shutdown signal...");
-        }
-        self.shutdown_signal.send(()).unwrap();
-        if self.log {
-            println!("Waiting for server to gracefully shutdown...");
-        }
-        self.app_handle.join().unwrap();
-        if self.log {
-            println!("Server has gracefully shutdown.");
-        }
     }
 
     pub async fn sign_up(&self, body: &RawSignUpRequestBody) -> reqwest::Response {

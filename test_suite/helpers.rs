@@ -1,17 +1,3 @@
-//! This module sets up and runs integration tests
-//!
-//! The integration test uses the same PostgreSQL container as the development environment.
-//! But, it creates a separate test database for integration tests.
-//! The test database is named in the format `test_todo_db_<uuid>`,
-//! where `<uuid>` is the UUID with hyphens replaced by underscores.
-//!
-//! The integration test uses the same Redis container as the development environment,
-//! because the access tokens and refresh tokens are highly random.
-//!
-//! [NOTICE]
-//!
-//! A test database is created for each test run, so you must run the `bin/drop_test_dbs.sh` script
-//! to drop the all test databases.
 use std::{path::Path, thread::JoinHandle};
 
 use infra::AppState;
@@ -31,12 +17,13 @@ pub struct TestApp {
     pub redis_pool: deadpool_redis::Pool,
 }
 
-pub async fn configure_test_app() -> TestApp {
-    // Load the application settings
+pub fn load_app_settings_for_testing() -> AppSettings {
     let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
     let path = Path::new(&dir).join("..").join("app_settings.toml");
-    let mut app_settings = load_app_settings(path.as_os_str().to_str().unwrap()).unwrap();
+    load_app_settings(path.as_os_str().to_str().unwrap()).unwrap()
+}
 
+pub async fn configure_test_app(mut app_settings: AppSettings) -> TestApp {
     // Set up the test database
     let database_name =
         format!("{}{}", TEST_DATABASE_PREFIX, uuid::Uuid::new_v4()).replace('-', "_");
@@ -59,16 +46,20 @@ pub async fn configure_test_app() -> TestApp {
     }
 }
 
-/// Sets up the PostgreSQL database for testing
-async fn setup_database(settings: &DatabaseSettings) -> PgPool {
-    // Connect to the **postgres** database
+async fn connect_to_postgres_database(settings: &DatabaseSettings) -> PgConnection {
     let postgres_settings = DatabaseSettings {
         name: String::from("postgres"),
         ..settings.clone()
     };
-    let mut conn = PgConnection::connect_with(&postgres_settings.connect_options())
+    PgConnection::connect_with(&postgres_settings.connect_options())
         .await
-        .unwrap();
+        .expect("Failed to connect to PostgreSQL database")
+}
+
+/// Sets up the PostgreSQL database for testing
+async fn setup_database(settings: &DatabaseSettings) -> PgPool {
+    // Connect to the **postgres** database
+    let mut conn = connect_to_postgres_database(settings).await;
 
     // Create the test database
     conn.execute(format!("CREATE DATABASE {};", settings.name).as_str())

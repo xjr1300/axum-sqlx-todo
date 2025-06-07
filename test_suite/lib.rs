@@ -2,11 +2,13 @@ mod helpers;
 mod test_case;
 mod user;
 
-use crate::test_case::TestCase;
+use crate::{helpers::load_app_settings_for_testing, test_case::TestCase};
 
 #[tokio::test]
-async fn integration_health_check() {
-    let test_case = TestCase::begin(false).await;
+#[ignore]
+async fn health_check() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, false).await;
 
     let uri = format!("{}/health-check", test_case.origin());
     let response = test_case.http_client.get(&uri).send().await.unwrap();

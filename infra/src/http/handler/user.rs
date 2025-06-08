@@ -16,7 +16,7 @@ use time::{Duration, OffsetDateTime, serde::rfc3339};
 use domain::{
     DomainError, DomainResult,
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
-    repositories::{TokenTtlPair, UserInput, UserRepository},
+    repositories::{TokenPairWithExpired, UserInput, UserRepository},
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
 use utils::serde::serialize_secret_string;
@@ -226,33 +226,39 @@ async fn store_login_info(
     attempted_at: OffsetDateTime,
 ) -> ApiResult<LoginResponseBody> {
     // アクセストークンとリフレッシュトークンを作成
-    let access_expiration = attempted_at + Duration::seconds(token_settings.access_max_age);
-    let refresh_expiration = attempted_at + Duration::seconds(token_settings.refresh_max_age);
+    let access_expired_at = attempted_at + Duration::seconds(token_settings.access_max_age);
+    let refresh_expired_at = attempted_at + Duration::seconds(token_settings.refresh_max_age);
     let token_pair = generate_token_pair(
         user_id,
-        access_expiration,
-        refresh_expiration,
+        access_expired_at,
+        refresh_expired_at,
         &token_settings.jwt_secret,
     )?;
     // アクセストークンとリフレッシュトークンを、ハッシュ化してRedisに登録
     // Redisには、アクセストークンをハッシュ化した文字列をキーに、ユーザーIDとトークンの種類を表現する文字列を':'で
     // 連結した文字列を値に追加する。
     // Redisに登録するレコードは、トークンの種類別の有効期限を設定する。
-    let token_ttl_pair = TokenTtlPair {
+    let token_pair_with_expired = TokenPairWithExpired {
         access: &token_pair.access.0,
-        access_ttl: token_settings.access_max_age,
+        access_expired_at,
         refresh: &token_pair.refresh.0,
-        refresh_ttl: token_settings.refresh_max_age,
+        refresh_expired_at,
     };
     use_case
-        .store_login_info(user_id, token_ttl_pair, attempted_at)
+        .store_login_info(
+            user_id,
+            token_pair_with_expired,
+            token_settings.access_max_age,
+            token_settings.refresh_max_age,
+            attempted_at,
+        )
         .await
         .map_err(internal_server_error)?;
     Ok(LoginResponseBody {
         access_token: token_pair.access.0,
-        access_expiration,
+        access_expiration: access_expired_at,
         refresh_token: token_pair.refresh.0,
-        refresh_expiration,
+        refresh_expiration: refresh_expired_at,
     })
 }
 

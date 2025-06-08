@@ -1,15 +1,14 @@
 use std::str::FromStr as _;
 
-use async_trait::async_trait;
 use deadpool_redis::{Connection as RedisConnection, Pool as RedisPool};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret as _, SecretString};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use domain::models::UserId;
-use domain::repositories::{TokenContent, TokenRepository, TokenTtlPair, TokenType};
+use domain::repositories::{TokenContent, TokenPairWithExpired, TokenRepository, TokenType};
 use domain::{DomainError, DomainErrorKind, DomainResult};
-use uuid::Uuid;
 
 /// Redisトークンリポジトリ
 pub struct RedisTokenRepository {
@@ -45,7 +44,7 @@ impl RedisTokenRepository {
     }
 }
 
-#[async_trait]
+#[async_trait::async_trait]
 impl TokenRepository for RedisTokenRepository {
     /// アクセストークンとリフレッシュトークンを登録する。
     ///
@@ -55,29 +54,30 @@ impl TokenRepository for RedisTokenRepository {
     async fn register_token_pair<'a>(
         &self,
         user_id: UserId,
-        token_pair: TokenTtlPair<'a>,
-    ) -> DomainResult<()> {
-        let access_key = generate_key(token_pair.access);
-        let access_value = generate_value(user_id, TokenType::Access);
-        let refresh_key = generate_key(token_pair.refresh);
-        let refresh_value = generate_value(user_id, TokenType::Refresh);
+        tokens: &TokenPairWithExpired<'a>,
+        access_max_age: i64,
+        refresh_max_age: i64,
+    ) -> DomainResult<(String, String)> {
+        let access_token_key = generate_key(tokens.access);
+        let access_token_value = generate_value(user_id, TokenType::Access);
+        let refresh_token_key = generate_key(tokens.refresh);
+        let refresh_token_value = generate_value(user_id, TokenType::Refresh);
         let mut conn = self.connection().await?;
         store(
             &mut conn,
-            &access_key,
-            &access_value,
-            token_pair.access_ttl as u64,
+            &access_token_key,
+            &access_token_value,
+            access_max_age as u64,
         )
         .await?;
         store(
             &mut conn,
-            &refresh_key,
-            &refresh_value,
-            token_pair.refresh_ttl as u64,
+            &refresh_token_key,
+            &refresh_token_value,
+            refresh_max_age as u64,
         )
         .await?;
-
-        Ok(())
+        Ok((access_token_key, refresh_token_key))
     }
 
     /// トークンからユーザーIDとトークンの種類を取得する。
@@ -117,7 +117,6 @@ impl TokenRepository for RedisTokenRepository {
 fn generate_key(token: &SecretString) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.expose_secret().as_bytes());
-
     format!("{:x}", hasher.finalize())
 }
 
@@ -133,13 +132,20 @@ fn generate_value(user_id: UserId, token_type: TokenType) -> String {
 /// * `conn` - Redisコネクション
 /// * `key` - キー
 /// * `value` - 値
-/// * `ttl` - 生存期間（秒）
-async fn store(conn: &mut RedisConnection, key: &str, value: &str, ttl: u64) -> DomainResult<()> {
-    conn.set_ex(key, value, ttl).await.map_err(|e| DomainError {
-        kind: DomainErrorKind::Repository,
-        messages: vec!["Failed to store key and value in redis".into()],
-        source: e.into(),
-    })
+/// * `max_age` - 生存期間（秒）
+async fn store(
+    conn: &mut RedisConnection,
+    key: &str,
+    value: &str,
+    max_age: u64,
+) -> DomainResult<()> {
+    conn.set_ex(key, value, max_age)
+        .await
+        .map_err(|e| DomainError {
+            kind: DomainErrorKind::Repository,
+            messages: vec!["Failed to store key and value in redis".into()],
+            source: e.into(),
+        })
 }
 
 /// Redisからキーで値を取得する。

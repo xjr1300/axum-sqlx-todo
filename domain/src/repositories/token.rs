@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use enum_display::EnumDisplay;
 use secrecy::SecretString;
+use time::OffsetDateTime;
 
 use crate::models::UserId;
 use crate::{DomainError, DomainErrorKind, DomainResult};
@@ -17,8 +18,10 @@ pub trait TokenRepository: Sync + Send {
     async fn register_token_pair<'a>(
         &self,
         user_id: UserId,
-        tokens: TokenTtlPair<'a>,
-    ) -> DomainResult<()>;
+        tokens: &TokenPairWithExpired<'a>,
+        access_max_age: i64,
+        refresh_max_age: i64,
+    ) -> DomainResult<(String, String)>;
 
     /// トークンからユーザーIDとトークンの種類を取得する。
     ///
@@ -33,15 +36,15 @@ pub trait TokenRepository: Sync + Send {
 }
 
 /// アクセストークン及びリフレッシュトークンとそれぞれの生存期間
-pub struct TokenTtlPair<'a> {
+pub struct TokenPairWithExpired<'a> {
     /// アクセストークン
     pub access: &'a SecretString,
     /// アクセストークンの生存期間（秒）
-    pub access_ttl: i64,
+    pub access_expired_at: OffsetDateTime,
     /// リフレッシュトークン
     pub refresh: &'a SecretString,
     /// リフレッシュトークンの生存期間（秒）
-    pub refresh_ttl: i64,
+    pub refresh_expired_at: OffsetDateTime,
 }
 
 /// トークンコンテンツ

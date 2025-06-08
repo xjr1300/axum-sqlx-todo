@@ -26,12 +26,23 @@ pub trait UserRepository {
     /// ユーザーを更新する。
     async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User>;
 
-    /// ユーザーの最終ログイン日時を更新する。
-    async fn update_last_logged_in_at(
+    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
+    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
+    async fn store_update_last_logged_in_at_and_tokens(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
+        access_key: &str,
+        access_expired_at: OffsetDateTime,
+        refresh_key: &str,
+        refresh_expired_at: OffsetDateTime,
     ) -> DomainResult<User>;
+
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
+    async fn token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
+
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを削除する。
+    async fn delete_token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
 
     /// ユーザーのパスワードを取得する。
     async fn get_hashed_password(&self, id: UserId) -> DomainResult<PHCString>;

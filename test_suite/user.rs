@@ -95,6 +95,9 @@ async fn register_user_and_login_and_me() {
         test_case.app_state.app_settings.token.refresh_max_age,
     );
 
+    // TODO: Check that the access and refresh tokens are stored in postgres
+    // TODO: Check that the access and refresh tokens are stored in redis
+
     // Retrieve the user information
     let response = test_case.me().await;
     let ResponseParts {

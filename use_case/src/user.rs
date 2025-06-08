@@ -1,7 +1,7 @@
 use domain::{
     DomainResult,
     models::{PHCString, User, UserId},
-    repositories::{TokenRepository, TokenTtlPair, UserInput, UserRepository},
+    repositories::{TokenPairWithExpired, TokenRepository, UserInput, UserRepository},
 };
 use time::{Duration, OffsetDateTime};
 
@@ -43,16 +43,31 @@ where
     pub async fn store_login_info(
         &self,
         user_id: UserId,
-        token_ttl_pair: TokenTtlPair<'_>,
+        token_pair_expired: TokenPairWithExpired<'_>,
+        access_max_age: i64,
+        refresh_max_age: i64,
         attempted_at: OffsetDateTime,
     ) -> DomainResult<()> {
         // アクセストークンとリフレッシュトークンを登録
-        self.token_repository
-            .register_token_pair(user_id, token_ttl_pair)
+        let (access_token_key, refresh_token_key) = self
+            .token_repository
+            .register_token_pair(
+                user_id,
+                &token_pair_expired,
+                access_max_age,
+                refresh_max_age,
+            )
             .await?;
         // ユーザーのログイン日時を更新
         self.user_repository
-            .update_last_logged_in_at(user_id, attempted_at)
+            .store_update_last_logged_in_at_and_tokens(
+                user_id,
+                attempted_at,
+                &access_token_key,
+                token_pair_expired.access_expired_at,
+                &refresh_token_key,
+                token_pair_expired.refresh_expired_at,
+            )
             .await?;
         Ok(())
     }

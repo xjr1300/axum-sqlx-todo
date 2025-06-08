@@ -34,6 +34,22 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE index if NOT EXISTS idx_users_email ON users (email);
 
+-- table: user_tokens
+-- This table is inserted row when user logs in.
+-- This table should not be used to verify access/refresh tokens validity.
+-- This table aims to delete access/refresh tokens from redis when the user logs out.
+-- So, if user logs out, delete the record from this table.
+CREATE TABLE IF NOT EXISTS user_tokens (
+    id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL,
+    token_key VARCHAR(255) NOT NULL,
+    expired_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_user_tokens PRIMARY KEY (id),
+    CONSTRAINT fk_user_tokens_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
 -- table: login_failed_histories
 CREATE TABLE IF NOT EXISTS login_failed_histories (
     user_id UUID NOT NULL,

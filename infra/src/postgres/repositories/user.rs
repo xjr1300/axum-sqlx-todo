@@ -147,13 +147,34 @@ impl UserRepository for PgUserRepository {
         }
     }
 
-    /// ユーザーの最終ログイン日時を更新する。
-    async fn update_last_logged_in_at(
+    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
+    async fn store_update_last_logged_in_at_and_tokens(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
+        access_key: &str,
+        access_expired_at: OffsetDateTime,
+        refresh_key: &str,
+        refresh_expired_at: OffsetDateTime,
     ) -> DomainResult<User> {
         let mut tx = self.begin().await?;
+        // Redisに記録したトークンコンテンツのキーを登録
+        let ids = vec![id.0, id.0];
+        let keys = vec![access_key, refresh_key];
+        let expires = vec![access_expired_at, refresh_expired_at];
+        sqlx::query(
+            r#"
+            INSERT INTO user_tokens (user_id, token_key, expired_at)
+            SELECT * FROM UNNEST($1::UUID[], $2::TEXT[], $3::TIMESTAMPTZ[])
+            "#,
+        )
+        .bind(&ids)
+        .bind(&keys)
+        .bind(&expires)
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        // ユーザーの最終ログイン日時を更新
         let row = sqlx::query_as!(
             UserRow,
             r#"
@@ -188,6 +209,40 @@ impl UserRepository for PgUserRepository {
             }
             None => user_not_found(id),
         }
+    }
+
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
+    async fn token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT token_key
+            FROM user_tokens
+            WHERE user_id = $1
+            "#,
+            id.0
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(repository_error)?;
+        Ok(rows.into_iter().map(|row| row.token_key).collect())
+    }
+
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを削除する。
+    async fn delete_token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
+        let mut tx = self.begin().await?;
+        let rows = sqlx::query!(
+            r#"
+            DELETE FROM user_tokens
+            WHERE user_id = $1
+            RETURNING token_key
+            "#,
+            id.0
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        commit(tx).await?;
+        Ok(rows.into_iter().map(|row| (row.token_key)).collect())
     }
 
     /// ユーザーのパスワードを取得する。

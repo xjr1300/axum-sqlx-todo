@@ -420,7 +420,18 @@ fn create_sign_up_request_body() -> RawSignUpRequestBody {
     }
 }
 
-// TODO: Ensure that an anonymous user can not access the user information handler.
+/// Ensure that an anonymous user can not access the user information endpoint.
+#[tokio::test]
+#[ignore]
+async fn anonymous_user_cannot_access_user_information_endpoint() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, false).await;
+
+    let response = test_case.me().await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    test_case.end().await;
+}
 
 /// Ensure that the user can update their information successfully.
 #[tokio::test]
@@ -524,4 +535,15 @@ async fn user_update_test() {
     );
 }
 
-// TODO: Ensure that an anonymous user can not access an user update handler.
+/// Ensure that an anonymous user can not access an user update endpoint.
+#[tokio::test]
+#[ignore]
+async fn anonymous_user_cannot_access_user_update_endpoint() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, false).await;
+
+    let response = test_case.me().await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    test_case.end().await;
+}

@@ -147,20 +147,36 @@ impl UserRepository for PgUserRepository {
         }
     }
 
-    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
-    async fn store_update_last_logged_in_at_and_tokens(
+    /// ユーザーの最終ログイン日時を更新して、認証情報を登録するとともに、ログイン失敗履歴を削除する。
+    async fn handle_logged_in(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
-        access_key: &str,
+        access_key: &SecretString,
         access_expired_at: OffsetDateTime,
-        refresh_key: &str,
+        refresh_key: &SecretString,
         refresh_expired_at: OffsetDateTime,
-    ) -> DomainResult<User> {
+    ) -> DomainResult<()> {
         let mut tx = self.begin().await?;
-        // Redisに記録したトークンコンテンツのキーを登録
+        // ユーザーの最終ログイン日時を更新
+        let row_affected = sqlx::query!(
+            r#"
+            UPDATE users
+            SET last_login_at = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2
+            "#,
+            logged_in_at,
+            id.0
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        if row_affected.rows_affected() == 0 {
+            return user_not_found(id);
+        }
+        // 認証情報を登録
         let ids = vec![id.0, id.0];
-        let keys = vec![access_key, refresh_key];
+        let keys = vec![access_key.expose_secret(), refresh_key.expose_secret()];
         let expires = vec![access_expired_at, refresh_expired_at];
         sqlx::query(
             r#"
@@ -174,41 +190,18 @@ impl UserRepository for PgUserRepository {
         .execute(&mut *tx)
         .await
         .map_err(repository_error)?;
-        // ユーザーの最終ログイン日時を更新
-        let row = sqlx::query_as!(
-            UserRow,
+        // ユーザーのログイン失敗履歴を削除
+        sqlx::query!(
             r#"
-            WITH updated AS (
-                UPDATE users
-                SET
-                    last_login_at = $1,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = $2
-                RETURNING
-                    id, family_name, given_name, email, role_code,
-                    active, last_login_at, created_at, updated_at
-            )
-            SELECT
-                u.id, u.family_name, u.given_name, u.email, u.role_code,
-                r.name role_name, r.description role_description, r.display_order role_display_order,
-                r.created_at role_created_at, r.updated_at role_updated_at,
-                u.active, u.last_login_at, u.created_at, u.updated_at
-            FROM updated u
-            INNER JOIN roles r ON u.role_code = r.code
+            DELETE FROM login_failed_histories
+            WHERE user_id = $1
             "#,
-            logged_in_at,
             id.0
         )
-        .fetch_optional(&mut *tx)
+        .execute(&mut *tx)
         .await
         .map_err(repository_error)?;
-        match row {
-            Some(row) => {
-                commit(tx).await?;
-                User::try_from(row)
-            }
-            None => user_not_found(id),
-        }
+        commit(tx).await
     }
 
     /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
@@ -418,7 +411,7 @@ impl UserRepository for PgUserRepository {
     /// ユーザーのログイン失敗履歴をリセットする。
     ///
     /// 連続ログイン試行回数を1に設定して、最初にログインを試行した日時を指定された日時に更新する。
-    async fn reset_login_failure_history(
+    async fn reset_login_failed_history(
         &self,
         user_id: UserId,
         attempted_at: OffsetDateTime,

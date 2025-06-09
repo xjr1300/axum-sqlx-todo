@@ -38,28 +38,27 @@ pub struct Claim {
 /// # 引数
 ///
 /// * `user_id` - ユーザーID
-/// * `access_expiration` - アクセストークンの有効期限
-/// * `refresh_expiration` - リフレッシュトークンの有効期限
+/// * `access_max_age` - アクセストークンの最大有効期間（秒）
+/// * `refresh_max_age` - リフレッシュトークンの最大有効期間（秒）
 /// * `secret_key` - JWTを作成する秘密鍵
 pub fn generate_token_pair(
     user_id: UserId,
-    access_expiration: OffsetDateTime,
-    refresh_expiration: OffsetDateTime,
+    access_expired_at: OffsetDateTime,
+    refresh_expired_at: OffsetDateTime,
     secret_key: &SecretString,
 ) -> DomainResult<TokenPair> {
     // アクセストークンを生成
     let claim = Claim {
         user_id,
-        expiration: access_expiration.unix_timestamp() as u64,
+        expiration: access_expired_at.unix_timestamp() as u64,
     };
     let access = generate_token(claim, secret_key)?;
     // リフレッシュトークンを生成
     let claim = Claim {
         user_id,
-        expiration: refresh_expiration.unix_timestamp() as u64,
+        expiration: refresh_expired_at.unix_timestamp() as u64,
     };
     let refresh = generate_token(claim, secret_key)?;
-
     Ok(TokenPair {
         access: AccessToken(access),
         refresh: RefreshToken(refresh),
@@ -160,28 +159,30 @@ pub fn retrieve_claim_from_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use time::Duration;
 
     #[test]
     fn test_generate_valid_token_pair() -> anyhow::Result<()> {
+        let requested_at = OffsetDateTime::now_utc();
         let user_id = UserId::from(Uuid::new_v4());
-        let access_expiration = OffsetDateTime::now_utc() + time::Duration::days(1);
-        let refresh_expiration = OffsetDateTime::now_utc() + time::Duration::days(30);
+        let access_expired_at = requested_at + Duration::days(1);
+        let refresh_expired_at = requested_at + Duration::days(30);
         let secret_key = SecretString::new("super-secret-key".into());
 
         let token_pair =
-            generate_token_pair(user_id, access_expiration, refresh_expiration, &secret_key)?;
+            generate_token_pair(user_id, access_expired_at, refresh_expired_at, &secret_key)?;
         let access_claim = retrieve_claim_from_token(&token_pair.access.0, &secret_key)?;
         let refresh_claim = retrieve_claim_from_token(&token_pair.refresh.0, &secret_key)?;
 
         assert_eq!(access_claim.user_id, user_id);
         assert_eq!(
             access_claim.expiration,
-            access_expiration.unix_timestamp() as u64
+            access_expired_at.unix_timestamp() as u64
         );
         assert_eq!(refresh_claim.user_id, user_id);
         assert_eq!(
             refresh_claim.expiration,
-            refresh_expiration.unix_timestamp() as u64
+            refresh_expired_at.unix_timestamp() as u64
         );
         Ok(())
     }

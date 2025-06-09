@@ -21,7 +21,7 @@ use tokio::sync::oneshot;
 
 use domain::{
     models::{LoginFailedHistory, User, UserId},
-    repositories::{TokenContent, TokenRepository, UserRepository},
+    repositories::{TokenContent, TokenRepository, UserRepository, generate_auth_token_info_key},
 };
 use infra::{
     AppState, postgres::repositories::PgUserRepository, redis::token::RedisTokenRepository,
@@ -126,7 +126,8 @@ impl TestCase {
 
     pub async fn token_content_by_token(&self, token: &SecretString) -> Option<TokenContent> {
         let token_repo = RedisTokenRepository::new(self.app_state.redis_pool.clone());
-        token_repo.get_token_content(token).await.unwrap()
+        let key = generate_auth_token_info_key(token);
+        token_repo.get_token_content(&key).await.unwrap()
     }
 
     pub async fn sign_up(&self, body: &RawSignUpRequestBody) -> reqwest::Response {

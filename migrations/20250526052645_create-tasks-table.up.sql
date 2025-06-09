@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS user_tokens (
 -- table: login_failed_histories
 CREATE TABLE IF NOT EXISTS login_failed_histories (
     user_id UUID NOT NULL,
-    number_of_attempts INTEGER NOT NULL,
     attempted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    number_of_attempts INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_login_failed_histories PRIMARY KEY (user_id),

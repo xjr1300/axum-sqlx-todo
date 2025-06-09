@@ -12,7 +12,9 @@ use axum_extra::{
 };
 use secrecy::SecretString;
 
-use domain::repositories::{TokenRepository as _, TokenType, UserRepository as _};
+use domain::repositories::{
+    TokenRepository as _, TokenType, UserRepository as _, generate_auth_token_info_key,
+};
 use use_case::AuthorizedUser;
 
 use crate::{
@@ -48,7 +50,8 @@ pub async fn authorized_user_middleware(
     };
     // トークンリポジトリからトークンをキーにトークンコンテンツを取得
     let token_repository = RedisTokenRepository::new(app_state.redis_pool);
-    let token_content = match token_repository.get_token_content(&token).await {
+    let key = generate_auth_token_info_key(&token);
+    let token_content = match token_repository.get_token_content(&key).await {
         Ok(content) => content,
         Err(e) => {
             // トークンコンテンツを取得するときにエラーが発生した場合は、500 Internal Server Errorを返す

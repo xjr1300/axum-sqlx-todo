@@ -217,10 +217,10 @@ pub struct User {
 pub struct LoginFailedHistory {
     /// ユーザーID
     pub user_id: UserId,
-    /// 試行回数
-    pub number_of_attempts: u32,
     /// 最初に試行に失敗した日時
     pub attempted_at: OffsetDateTime,
+    /// 試行回数
+    pub number_of_attempts: u32,
     /// 作成日時
     pub created_at: OffsetDateTime,
     /// 更新日時

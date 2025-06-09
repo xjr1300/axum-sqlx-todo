@@ -1,3 +1,4 @@
+use secrecy::SecretString;
 use time::OffsetDateTime;
 
 use crate::{
@@ -26,17 +27,16 @@ pub trait UserRepository {
     /// ユーザーを更新する。
     async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User>;
 
-    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
-    /// ユーザーの最終ログイン日時を更新して、アクセストークンとリフレッシュトークンのキーを保存する。
-    async fn store_update_last_logged_in_at_and_tokens(
+    /// ユーザーの最終ログイン日時を更新して、認証情報を登録するとともに、ログイン失敗履歴を削除する。
+    async fn handle_logged_in(
         &self,
         id: UserId,
         logged_in_at: OffsetDateTime,
-        access_key: &str,
+        access_key: &SecretString,
         access_expired_at: OffsetDateTime,
-        refresh_key: &str,
+        refresh_key: &SecretString,
         refresh_expired_at: OffsetDateTime,
-    ) -> DomainResult<User>;
+    ) -> DomainResult<()>;
 
     /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
     async fn token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
@@ -71,7 +71,10 @@ pub trait UserRepository {
         user_id: UserId,
     ) -> DomainResult<Option<LoginFailedHistory>>;
 
-    /// ユーザーのアクティブ状態と、ユーザーの連続ログイン試行回数を更新する。
+    /// ユーザーのログイン試行回数をインクリメントする。
+    ///
+    /// ユーザーのログイン試行回数をインクリメントして、インクリメント後のログイン試行回数が、最大ログイン試行回数を超えた
+    /// 場合は、ユーザーをロックする。
     async fn increment_number_of_login_attempts(
         &self,
         user_id: UserId,
@@ -81,7 +84,7 @@ pub trait UserRepository {
     /// ユーザーのログイン失敗履歴をリセットする。
     ///
     /// 連続ログイン試行回数を1に設定して、最初にログインを試行した日時を指定された日時に更新する。
-    async fn reset_login_failure_history(
+    async fn reset_login_failed_history(
         &self,
         user_id: UserId,
         attempted_at: OffsetDateTime,

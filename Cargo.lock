@@ -615,6 +615,7 @@ dependencies = [
  "rstest",
  "secrecy",
  "serde",
+ "sha2",
  "thiserror",
  "time",
  "utils",

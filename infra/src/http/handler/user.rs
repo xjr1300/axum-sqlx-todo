@@ -10,13 +10,15 @@ use axum::{
 use cookie::{Cookie, SameSite};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
-use settings::{HttpProtocol, HttpSettings, TokenSettings};
+use settings::{AppSettings, HttpProtocol};
 use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
     DomainError, DomainResult,
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
-    repositories::{TokenPairWithExpired, UserInput, UserRepository},
+    repositories::{
+        TokenRepository as _, TokenType, UserInput, UserRepository, generate_auth_token_info,
+    },
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
 use utils::serde::serialize_secret_string;
@@ -32,6 +34,14 @@ use crate::{
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
 };
+
+type UserUseCaseImpl = UserUseCase<PgUserRepository, RedisTokenRepository>;
+
+fn user_use_case(app_state: &AppState) -> UserUseCaseImpl {
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    UserUseCase::new(user_repo, token_repo)
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,176 +100,169 @@ pub struct LoginResponseBody {
     #[serde(serialize_with = "serialize_secret_string")]
     access_token: SecretString,
     #[serde(serialize_with = "rfc3339::serialize")]
-    access_expiration: OffsetDateTime,
+    access_expired_at: OffsetDateTime,
     #[serde(serialize_with = "serialize_secret_string")]
     refresh_token: SecretString,
     #[serde(serialize_with = "rfc3339::serialize")]
-    refresh_expiration: OffsetDateTime,
+    refresh_expired_at: OffsetDateTime,
 }
 
 /// ログインハンドラ
-///
-/// # 手順
-///
-/// ## 1. ユーザーの取得
-///
-/// ユーザーのEメールアドレスから、リポジトリからユーザーを取得する。
-/// リポジトリからユーザーを取得できなかった場合は、404 Not Foundエラーを返す。
-///
-/// ## 2. ユーザーのアクティブフラグの確認
-///
-/// ユーザーのアクティブフラグを確認して、アクティブでない場合は、403 Forbiddenエラーを返す。
-///
-/// ## 3. パスワードの確認
-///
-/// 次に、ユーザーのパスワードを検証する。
-///
-/// ### 3.1. パスワードが一致した場合
-///
-/// ユーザーのパスワードが一致した場合は、最終ログイン日時を更新して、ログイン失敗履歴から、
-/// そのユーザーのレコードを削除する。
-/// その後、200 OKレスポンスとユーザー情報を返す。
-///
-/// ### 3.2. パスワードが一致しない場合
-///
-/// ユーザーのログイン試行履歴を確認して、次の通り処理する。
-/// その後、401 Unauthorizedエラーを返す。
-///
-/// #### 3.2.1. ログイン試行履歴が存在しない場合
-///
-/// ログイン失敗履歴にそのユーザーのレコードが存在しない場合は、
-/// ログイン失敗履歴に次のレコードを追加する。
-///
-/// - ログイン失敗回数: 1
-/// - ログイン試行開始日時: 現在の日時
-///
-///
-/// #### 3.2.2. ログイン試行履歴が存在する場合
-///
-/// ログイン失敗履歴にそのユーザーのレコードが存在する場合は、ログイン失敗履歴のログイン試行開始日時を確認する。
-///
-/// ##### 3.2.2.1. ログイン試行開始日時から現在日時までの経過時間が、連続ログイン試行許容時間未満の場合
-///
-/// ```text
-/// 現在日時 - ログイン試行開始日時 < 連続ログイン試行許容時間
-/// ```
-///
-/// ログイン失敗履歴のログイン試行回数を1回増やす。
-/// そしてログイン試行回数が連続ログイン試行許容回数を超えた場合は、ユーザーのアクティブフラグを無効にする。
-///
-/// ##### 3.2.2.2. ログイン試行開始日時から現在日時までの経過時間が、連続ログイン試行許容時間以上の場合
-///
-/// ```text
-/// 現在日時 - ログイン試行開始日時 >= 連続ログイン試行許容時間
-/// ```
-///
-/// ログイン試行履歴のログイン試行回数を1に、ログイン試行開始日時を現在の日時に更新する。
 #[tracing::instrument(skip(app_state))]
 pub async fn login(
     State(app_state): State<AppState>,
     Json(request_body): Json<LoginRequestBody>,
 ) -> ApiResult<Response<Body>> {
-    let attempted_at = OffsetDateTime::now_utc();
+    let requested_at = OffsetDateTime::now_utc();
     let settings = &app_state.app_settings;
-    let use_case = user_use_case(&app_state);
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
 
     // Eメールアドレスからユーザーを取得
     let email =
         Email::new(request_body.email).map_err(|_| bad_request("Invalid email address".into()))?;
-    let user = use_case
-        .user_repository
+    let user = user_repo
         .by_email(&email)
         .await
         .map_err(internal_server_error)?
-        .ok_or_else(login_failed_response)?;
+        .ok_or_else(unauthorized)?;
     // ユーザーのアクティブフラグを確認
     if !user.active {
-        return Err(ApiError {
-            status_code: StatusCode::LOCKED,
-            messages: vec![USER_LOCKED.into()],
-        });
+        return Err(locked());
     }
     // ユーザーのハッシュ化されたパスワードを取得
-    let hashed_password = use_case
-        .user_repository
+    let hashed_password = user_repo
         .get_hashed_password(user.id)
         .await
         .map_err(internal_server_error)?;
     // ユーザーのパスワードを検証
-    let raw_password =
-        RawPassword::new(request_body.password).map_err(|_| login_failed_response())?;
+    let raw_password = RawPassword::new(request_body.password).map_err(|_| unauthorized())?;
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
-        Ok(handle_login_succeed(
-            &settings.http,
-            &settings.token,
-            use_case,
-            user.id,
-            attempted_at,
-        )
-        .await?)
+        handle_password_matched(settings, user_repo, token_repo, user.id, requested_at).await
     } else {
-        use_case
-            .handle_login_failure(
-                user.id,
-                attempted_at,
-                settings.login.max_attempts,
-                settings.login.attempts_seconds,
-            )
-            .await
-            .map_err(internal_server_error)?;
-        Err(login_failed_response())
+        handle_password_unmatched(settings, user_repo, user.id, requested_at).await
     }
 }
 
-fn user_use_case(app_state: &AppState) -> UserUseCase<PgUserRepository, RedisTokenRepository> {
-    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
-    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    UserUseCase::new(user_repo, token_repo)
-}
-
-async fn store_login_info(
-    token_settings: &TokenSettings,
-    use_case: UserUseCase<PgUserRepository, RedisTokenRepository>,
+async fn handle_password_matched(
+    settings: &AppSettings,
+    user_repo: PgUserRepository,
+    token_repo: RedisTokenRepository,
     user_id: UserId,
-    attempted_at: OffsetDateTime,
-) -> ApiResult<LoginResponseBody> {
-    // アクセストークンとリフレッシュトークンを作成
-    let access_expired_at = attempted_at + Duration::seconds(token_settings.access_max_age);
-    let refresh_expired_at = attempted_at + Duration::seconds(token_settings.refresh_max_age);
+    requested_at: OffsetDateTime,
+) -> ApiResult<Response<Body>> {
+    // アクセストークンとリフレッシュトークンを生成
+    let access_expired_at = requested_at + Duration::seconds(settings.token.access_max_age);
+    let refresh_expired_at = requested_at + Duration::seconds(settings.token.refresh_max_age);
     let token_pair = generate_token_pair(
         user_id,
         access_expired_at,
         refresh_expired_at,
-        &token_settings.jwt_secret,
+        &settings.token.jwt_secret,
     )?;
-    // アクセストークンとリフレッシュトークンを、ハッシュ化してRedisに登録
-    // Redisには、アクセストークンをハッシュ化した文字列をキーに、ユーザーIDとトークンの種類を表現する文字列を':'で
-    // 連結した文字列を値に追加する。
-    // Redisに登録するレコードは、トークンの種類別の有効期限を設定する。
-    let token_pair_with_expired = TokenPairWithExpired {
-        access: &token_pair.access.0,
-        access_expired_at,
-        refresh: &token_pair.refresh.0,
-        refresh_expired_at,
-    };
-    use_case
-        .store_login_info(
+    // トークンリポジトリに認証情報を登録
+    let access_token_info = generate_auth_token_info(
+        user_id,
+        &token_pair.access.0,
+        TokenType::Access,
+        settings.token.access_max_age as u64,
+    );
+    let refresh_token_info = generate_auth_token_info(
+        user_id,
+        &token_pair.refresh.0,
+        TokenType::Refresh,
+        settings.token.refresh_max_age as u64,
+    );
+    token_repo
+        .register_token_pair(&access_token_info, &refresh_token_info)
+        .await
+        .map_err(internal_server_error)?;
+    // ユーザーの最終ログイン日時を更新して、認証情報を登録するとともに、ログイン失敗履歴を削除
+    user_repo
+        .handle_logged_in(
             user_id,
-            token_pair_with_expired,
-            token_settings.access_max_age,
-            token_settings.refresh_max_age,
-            attempted_at,
+            requested_at,
+            &access_token_info.key,
+            access_expired_at,
+            &refresh_token_info.key,
+            refresh_expired_at,
         )
         .await
         .map_err(internal_server_error)?;
-    Ok(LoginResponseBody {
+    // レスポンスを作成
+    let response_body = LoginResponseBody {
         access_token: token_pair.access.0,
-        access_expiration: access_expired_at,
+        access_expired_at,
         refresh_token: token_pair.refresh.0,
-        refresh_expiration: refresh_expired_at,
-    })
+        refresh_expired_at,
+    };
+    let mut response = Json(response_body.clone()).into_response();
+    let access_cookie = create_cookie(
+        settings.http.protocol,
+        &settings.http.host,
+        COOKIE_ACCESS_TOKEN_KEY,
+        &response_body.access_token,
+        Duration::seconds(settings.token.access_max_age),
+    );
+    let refresh_cookie = create_cookie(
+        settings.http.protocol,
+        &settings.http.host,
+        COOKIE_REFRESH_TOKEN_KEY,
+        &response_body.refresh_token,
+        Duration::seconds(settings.token.refresh_max_age),
+    );
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        access_cookie.to_string().parse::<HeaderValue>().unwrap(),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        refresh_cookie.to_string().parse::<HeaderValue>().unwrap(),
+    );
+    Ok(response)
+}
+
+async fn handle_password_unmatched(
+    settings: &AppSettings,
+    user_repo: PgUserRepository,
+    user_id: UserId,
+    requested_at: OffsetDateTime,
+) -> ApiResult<Response<Body>> {
+    // ユーザーのログイン失敗履歴を取得
+    match user_repo.get_login_failed_history(user_id).await? {
+        None => {
+            // ユーザーのログイン失敗履歴が存在しない場合は登録
+            user_repo
+                .create_login_failure_history(user_id, 1, requested_at)
+                .await?;
+        }
+        Some(history) => {
+            // ユーザーのログイン失敗履歴が存在する場合
+            if requested_at - history.attempted_at
+                < Duration::seconds(settings.login.attempts_seconds)
+            {
+                /*
+                ログインを試行した日時から最初にログインに失敗した日時までの経過時間が、連続ログイン試行許容時間未満の場合、
+                ログイン試行回数を1回増やす。その後、新しいログイン試行回数が、連続ログイン試行許容回数を超えば場合は、
+                ユーザーのアクティブフラグを無効にする。
+                 */
+                user_repo
+                    .increment_number_of_login_attempts(user_id, settings.login.max_attempts)
+                    .await?;
+            } else {
+                /*
+                ログイン試行開始日時から現在日時までの経過時間が、連続ログイン試行許容時間以上の場合、最初にログインを
+                試行した日時をログインを試行した日時に更新して、連続ログイン試行回数を1に設定する。
+                 */
+                user_repo
+                    .reset_login_failed_history(user_id, requested_at)
+                    .await?;
+            }
+        }
+    }
+    Err(unauthorized())
 }
 
 fn create_cookie<'c, N>(
@@ -282,49 +285,20 @@ where
     cookie.build()
 }
 
-async fn handle_login_succeed(
-    http_settings: &HttpSettings,
-    token_settings: &TokenSettings,
-    use_case: UserUseCase<PgUserRepository, RedisTokenRepository>,
-    user_id: UserId,
-    attempted_at: OffsetDateTime,
-) -> ApiResult<Response<Body>> {
-    // ログイン情報を記録
-    let response_body = store_login_info(token_settings, use_case, user_id, attempted_at).await?;
-    // レスポンスを作成
-    let mut response = Json(response_body.clone()).into_response();
-    let access_cookie = create_cookie(
-        http_settings.protocol,
-        &http_settings.host,
-        COOKIE_ACCESS_TOKEN_KEY,
-        &response_body.access_token,
-        Duration::seconds(token_settings.access_max_age),
-    );
-    let refresh_cookie = create_cookie(
-        http_settings.protocol,
-        &http_settings.host,
-        COOKIE_REFRESH_TOKEN_KEY,
-        &response_body.refresh_token,
-        Duration::seconds(token_settings.refresh_max_age),
-    );
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        access_cookie.to_string().parse::<HeaderValue>().unwrap(),
-    );
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        refresh_cookie.to_string().parse::<HeaderValue>().unwrap(),
-    );
-    Ok(response)
-}
-
 const LOGIN_FAILED: &str = "Login failed. Please check your email and password";
 const USER_LOCKED: &str = "User is locked";
 
-fn login_failed_response() -> ApiError {
+fn unauthorized() -> ApiError {
     ApiError {
         status_code: StatusCode::UNAUTHORIZED,
         messages: vec![LOGIN_FAILED.into()],
+    }
+}
+
+fn locked() -> ApiError {
+    ApiError {
+        status_code: StatusCode::LOCKED,
+        messages: vec![USER_LOCKED.into()],
     }
 }
 

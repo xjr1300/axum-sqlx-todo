@@ -2,14 +2,14 @@ use std::collections::HashMap;
 
 use cookie::{Cookie, SameSite};
 use reqwest::StatusCode;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret as _, SecretString};
 use settings::HttpProtocol;
 use sqlx::types::time::OffsetDateTime;
 use time::Duration;
 
 use domain::{
     models::{USER_ROLE_CODE, User},
-    repositories::TokenType,
+    repositories::{TokenType, generate_auth_token_info_key},
 };
 use infra::http::{COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY};
 
@@ -51,26 +51,29 @@ async fn register_user_and_login_and_me() {
         body,
     } = split_response(response).await;
     assert!(status_code.is_success());
+
     // Check to ensure that logged in user information was updated
     let user = test_case.user_by_id(user.id).await.unwrap();
     assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
     assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
+
     // Check to ensure that the response body contains access and refresh tokens
     let login_response_body = serde_json::from_str::<RawLoginResponseBody>(&body).unwrap();
     let access_token = SecretString::new(login_response_body.access_token.clone().into());
     let access_content = test_case
-        .token_content_by_token(&access_token)
+        .token_content_from_token_repo(&access_token)
         .await
         .unwrap();
     assert_eq!(access_content.user_id, sign_up_user_id);
     assert_eq!(access_content.token_type, TokenType::Access);
     let refresh_token = SecretString::new(login_response_body.refresh_token.clone().into());
     let refresh_content = test_case
-        .token_content_by_token(&refresh_token)
+        .token_content_from_token_repo(&refresh_token)
         .await
         .unwrap();
     assert_eq!(refresh_content.user_id, sign_up_user_id);
     assert_eq!(refresh_content.token_type, TokenType::Refresh);
+
     // Check to ensure that access and refresh tokens are set in cookies
     let set_cookie_values = headers.get_all(reqwest::header::SET_COOKIE);
     let mut set_cookies: HashMap<String, Cookie> = HashMap::new();
@@ -95,8 +98,34 @@ async fn register_user_and_login_and_me() {
         test_case.app_state.app_settings.token.refresh_max_age,
     );
 
-    // TODO: Check that the access and refresh tokens are stored in postgres
-    // TODO: Check that the access and refresh tokens are stored in redis
+    // Check that the access and refresh tokens are stored in postgres
+    let access_key = generate_auth_token_info_key(&access_token);
+    let refresh_key = generate_auth_token_info_key(&refresh_token);
+    let user_tokens = test_case.user_tokens_from_user_repo(user.id).await;
+    assert!(
+        user_tokens
+            .iter()
+            .any(|ut| ut.token_key.expose_secret() == access_key.expose_secret())
+    );
+    assert!(
+        user_tokens
+            .iter()
+            .any(|ut| ut.token_key.expose_secret() == refresh_key.expose_secret())
+    );
+
+    // Check that the access and refresh tokens are stored in redis
+    assert!(
+        test_case
+            .token_content_from_token_repo(&access_token)
+            .await
+            .is_some()
+    );
+    assert!(
+        test_case
+            .token_content_from_token_repo(&refresh_token)
+            .await
+            .is_some()
+    );
 
     // Retrieve the user information
     let response = test_case.me().await;

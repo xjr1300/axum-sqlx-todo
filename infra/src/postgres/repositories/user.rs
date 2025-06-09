@@ -8,7 +8,7 @@ use domain::{
         Email, LoginFailedHistory, PHCString, Role, RoleCode, RoleName, User, UserId,
         primitives::{Description, DisplayOrder},
     },
-    repositories::{UserInput, UserRepository},
+    repositories::{UserInput, UserRepository, UserToken},
 };
 
 use super::{PgRepository, commit, repository_error};
@@ -204,11 +204,12 @@ impl UserRepository for PgUserRepository {
         commit(tx).await
     }
 
-    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
-    async fn token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
-        let rows = sqlx::query!(
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンを取得する。
+    async fn user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<UserToken>> {
+        Ok(sqlx::query_as!(
+            UserTokenRow,
             r#"
-            SELECT token_key
+            SELECT id, user_id, token_key, expired_at, created_at, updated_at
             FROM user_tokens
             WHERE user_id = $1
             "#,
@@ -216,12 +217,14 @@ impl UserRepository for PgUserRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(repository_error)?;
-        Ok(rows.into_iter().map(|row| row.token_key).collect())
+        .map_err(repository_error)?
+        .into_iter()
+        .map(UserToken::from)
+        .collect())
     }
 
     /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを削除する。
-    async fn delete_token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
+    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
         let mut tx = self.begin().await?;
         let rows = sqlx::query!(
             r#"
@@ -507,6 +510,28 @@ impl From<LoginFailedHistoryRow> for LoginFailedHistory {
             user_id: row.user_id.into(),
             number_of_attempts: row.number_of_attempts as u32,
             attempted_at: row.attempted_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
+struct UserTokenRow {
+    id: Uuid,
+    user_id: UserId,
+    token_key: String,
+    expired_at: OffsetDateTime,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+}
+
+impl From<UserTokenRow> for UserToken {
+    fn from(row: UserTokenRow) -> Self {
+        UserToken {
+            id: row.id,
+            user_id: row.user_id,
+            token_key: SecretString::new(row.token_key.into()),
+            expired_at: row.expired_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

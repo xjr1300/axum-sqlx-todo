@@ -1,5 +1,6 @@
 use secrecy::SecretString;
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use crate::{
     DomainResult,
@@ -38,11 +39,11 @@ pub trait UserRepository {
         refresh_expired_at: OffsetDateTime,
     ) -> DomainResult<()>;
 
-    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを取得する。
-    async fn token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンを取得する。
+    async fn user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<UserToken>>;
 
-    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを削除する。
-    async fn delete_token_keys_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
+    /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンを削除する。
+    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
 
     /// ユーザーのパスワードを取得する。
     async fn get_hashed_password(&self, id: UserId) -> DomainResult<PHCString>;
@@ -89,4 +90,13 @@ pub trait UserRepository {
         user_id: UserId,
         attempted_at: OffsetDateTime,
     ) -> DomainResult<()>;
+}
+
+pub struct UserToken {
+    pub id: Uuid,
+    pub user_id: UserId,
+    pub token_key: SecretString,
+    pub expired_at: OffsetDateTime,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
 }

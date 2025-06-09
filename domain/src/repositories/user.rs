@@ -14,6 +14,13 @@ pub struct UserInput {
     pub email: Email,
 }
 
+#[derive(Debug, Clone)]
+pub struct UpdateUserInput {
+    pub family_name: Option<FamilyName>,
+    pub given_name: Option<GivenName>,
+    pub email: Option<Email>,
+}
+
 #[async_trait::async_trait]
 pub trait UserRepository {
     /// ユーザーを新規作成する。
@@ -26,7 +33,7 @@ pub trait UserRepository {
     async fn by_email(&self, email: &Email) -> DomainResult<Option<User>>;
 
     /// ユーザーを更新する。
-    async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User>;
+    async fn update(&self, id: UserId, user: UpdateUserInput) -> DomainResult<User>;
 
     /// ユーザーの最終ログイン日時を更新して、認証情報を登録するとともに、ログイン失敗履歴を削除する。
     async fn handle_logged_in(

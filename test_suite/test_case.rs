@@ -26,7 +26,8 @@ use domain::{
     },
 };
 use infra::{
-    AppState, postgres::repositories::PgUserRepository, redis::token::RedisTokenRepository,
+    AppState, http::handler::user::UpdateUserRequestBody, postgres::repositories::PgUserRepository,
+    redis::token::RedisTokenRepository,
 };
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};
@@ -155,6 +156,16 @@ impl TestCase {
         self.http_client.get(&uri).send().await.unwrap()
     }
 
+    pub async fn update_user(&self, body: &UpdateUserRequestBody) -> reqwest::Response {
+        let uri = format!("{}/users/me", self.origin());
+        self.http_client
+            .patch(&uri)
+            .json(body)
+            .send()
+            .await
+            .unwrap()
+    }
+
     pub async fn logout(&self) -> reqwest::Response {
         let uri = format!("{}/users/logout", self.origin());
         self.http_client.post(&uri).send().await.unwrap()
@@ -190,9 +201,5 @@ impl From<RawSignUpRequestBody> for RawLoginRequestBody {
 #[serde(rename_all = "camelCase")]
 pub struct RawLoginResponseBody {
     pub access_token: String,
-    // #[serde(deserialize_with = "rfc3339::deserialize")]
-    // pub access_expiration: OffsetDateTime,
     pub refresh_token: String,
-    // #[serde(deserialize_with = "rfc3339::deserialize")]
-    // pub refresh_expiration: OffsetDateTime,
 }

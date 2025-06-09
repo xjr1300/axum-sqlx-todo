@@ -1,7 +1,7 @@
 use domain::{
     DomainResult,
-    models::{PHCString, User},
-    repositories::{TokenRepository, UserInput, UserRepository},
+    models::{PHCString, User, UserId},
+    repositories::{TokenRepository, UpdateUserInput, UserInput, UserRepository},
 };
 /// ユーザーユースケース
 pub struct UserUseCase<UR, TR>
@@ -10,9 +10,9 @@ where
     TR: TokenRepository,
 {
     /// ユーザーリポジトリ
-    pub user_repository: UR,
+    pub user_repo: UR,
     /// トークンリポジトリ
-    pub token_repository: TR,
+    pub token_repo: TR,
 }
 
 impl<UR, TR> UserUseCase<UR, TR>
@@ -21,10 +21,10 @@ where
     TR: TokenRepository,
 {
     /// ユーザー用ユースケースを作成する。
-    pub fn new(user_repository: UR, token_repository: TR) -> Self {
+    pub fn new(user_repo: UR, token_repo: TR) -> Self {
         Self {
-            user_repository,
-            token_repository,
+            user_repo,
+            token_repo,
         }
     }
 
@@ -34,6 +34,12 @@ where
         input: UserInput,
         hashed_password: PHCString,
     ) -> DomainResult<User> {
-        self.user_repository.create(input, hashed_password).await
+        self.user_repo.create(input, hashed_password).await
+    }
+
+    /// ユーザーを更新する。
+    pub async fn update(&self, user_id: UserId, input: UpdateUserInput) -> DomainResult<User> {
+        let user = self.user_repo.update(user_id, input).await?;
+        Ok(user)
     }
 }

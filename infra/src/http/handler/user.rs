@@ -17,7 +17,8 @@ use domain::{
     DomainError, DomainResult,
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
     repositories::{
-        TokenRepository as _, TokenType, UserInput, UserRepository, generate_auth_token_info,
+        TokenRepository as _, TokenType, UpdateUserInput, UserInput, UserRepository,
+        generate_auth_token_info,
     },
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
@@ -144,6 +145,44 @@ pub async fn login(
     } else {
         handle_password_unmatched(settings, user_repo, user.id, requested_at).await
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserRequestBody {
+    pub family_name: Option<String>,
+    pub given_name: Option<String>,
+    pub email: Option<String>,
+}
+
+impl TryFrom<UpdateUserRequestBody> for UpdateUserInput {
+    type Error = DomainError;
+
+    fn try_from(input: UpdateUserRequestBody) -> DomainResult<Self> {
+        Ok(UpdateUserInput {
+            family_name: input.family_name.map(FamilyName::new).transpose()?,
+            given_name: input.given_name.map(GivenName::new).transpose()?,
+            email: input.email.map(Email::new).transpose()?,
+        })
+    }
+}
+
+/// ログアウトハンドラ
+#[tracing::instrument(skip(app_state))]
+pub async fn update(
+    State(app_state): State<AppState>,
+    Extension(user): Extension<AuthorizedUser>,
+    Json(request_body): Json<UpdateUserRequestBody>,
+) -> ApiResult<Json<User>> {
+    let input = UpdateUserInput::try_from(request_body)?;
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    let use_case = UserUseCase::new(user_repo, token_repo);
+    let user = use_case
+        .update(user.0.id, input)
+        .await
+        .map_err(internal_server_error)?;
+    Ok(Json(user))
 }
 
 /// ログアウトハンドラ

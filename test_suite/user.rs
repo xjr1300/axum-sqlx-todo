@@ -11,7 +11,9 @@ use domain::{
     models::{USER_ROLE_CODE, User},
     repositories::{TokenType, generate_auth_token_info_key},
 };
-use infra::http::{COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY};
+use infra::http::{
+    COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, handler::user::UpdateUserRequestBody,
+};
 
 use crate::{
     helpers::{ResponseParts, load_app_settings_for_testing, split_response},
@@ -20,7 +22,7 @@ use crate::{
     },
 };
 
-/// Ensure that a user can register, log in, and retrieve their information
+/// Ensure that a user can register, log in, retrieve their information, and log out successfully.
 #[tokio::test]
 #[ignore]
 async fn user_integration_test() {
@@ -417,3 +419,109 @@ fn create_sign_up_request_body() -> RawSignUpRequestBody {
         password: String::from("ab12$%AB"),
     }
 }
+
+// TODO: Ensure that an anonymous user can not access the user information handler.
+
+/// Ensure that the user can update their information successfully.
+#[tokio::test]
+#[ignore]
+async fn user_update_test() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, false).await;
+
+    // Register a new user
+    let sign_up_request_body = create_sign_up_request_body();
+    let response = test_case.sign_up(&sign_up_request_body).await;
+    let user: User = response.json().await.unwrap();
+
+    // Log in with the new user
+    let request_body: RawLoginRequestBody = sign_up_request_body.clone().into();
+    let _ = test_case.login(&request_body).await;
+
+    // Update user information
+    let requested_at = OffsetDateTime::now_utc();
+    let request_body = UpdateUserRequestBody {
+        family_name: Some(String::from("Smith")),
+        given_name: Some(String::from("Jane")),
+        email: Some(String::from("jane@example.com")),
+    };
+    let response = test_case.update_user(&request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::OK);
+    let updated_user: User = serde_json::from_str(&body).unwrap();
+    assert_eq!(updated_user.id, user.id);
+    assert_eq!(
+        updated_user.family_name.0,
+        request_body.family_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.given_name.0,
+        request_body.given_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.email.0,
+        request_body.email.as_ref().unwrap().as_str()
+    );
+    assert!((updated_user.updated_at - requested_at).abs() < REQUEST_TIMEOUT);
+
+    // Update family name only
+    let family_name_only = UpdateUserRequestBody {
+        family_name: Some(String::from("Schmo")),
+        ..Default::default()
+    };
+    let response = test_case.update_user(&family_name_only).await;
+    let updated_user: User = response.json().await.unwrap();
+    assert_eq!(
+        updated_user.family_name.0,
+        family_name_only.family_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(updated_user.given_name.0, request_body.given_name.unwrap());
+    assert_eq!(
+        updated_user.email.0,
+        request_body.email.as_ref().unwrap().as_str()
+    );
+
+    // Update given name only
+    let given_name_only = UpdateUserRequestBody {
+        given_name: Some(String::from("Jane")),
+        ..Default::default()
+    };
+    let response = test_case.update_user(&given_name_only).await;
+    let updated_user: User = response.json().await.unwrap();
+    assert_eq!(
+        updated_user.family_name.0,
+        family_name_only.family_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.given_name.0,
+        given_name_only.given_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.email.0,
+        request_body.email.as_ref().unwrap().as_str()
+    );
+
+    // Update email only
+    let email_only = UpdateUserRequestBody {
+        email: Some(String::from("jane@example.com")),
+        ..Default::default()
+    };
+    let response = test_case.update_user(&email_only).await;
+    let updated_user: User = response.json().await.unwrap();
+    assert_eq!(
+        updated_user.family_name.0,
+        family_name_only.family_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.given_name.0,
+        given_name_only.given_name.as_ref().unwrap().as_str()
+    );
+    assert_eq!(
+        updated_user.email.0,
+        email_only.email.as_ref().unwrap().as_str()
+    );
+}
+
+// TODO: Ensure that an anonymous user can not access an user update handler.

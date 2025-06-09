@@ -8,7 +8,7 @@ use domain::{
         Email, LoginFailedHistory, PHCString, Role, RoleCode, RoleName, User, UserId,
         primitives::{Description, DisplayOrder},
     },
-    repositories::{UserInput, UserRepository, UserToken},
+    repositories::{UpdateUserInput, UserInput, UserRepository, UserToken},
 };
 
 use super::{PgRepository, commit, repository_error};
@@ -105,6 +105,48 @@ impl UserRepository for PgUserRepository {
     }
 
     /// ユーザーを更新する。
+    async fn update(&self, id: UserId, user: UpdateUserInput) -> DomainResult<User> {
+        let mut tx = self.begin().await?;
+        let row = sqlx::query_as!(
+            UserRow,
+            r#"
+            WITH updated AS (
+                UPDATE users
+                SET
+                    family_name = COALESCE($1, family_name),
+                    given_name = COALESCE($2, given_name),
+                    email = COALESCE($3, email),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $4
+                RETURNING
+                    id, family_name, given_name, email, role_code, active,
+                    last_login_at, created_at, updated_at
+            )
+            SELECT
+                u.id, u.family_name, u.given_name, u.email, u.role_code,
+                r.name role_name, r.description role_description, r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at, u.updated_at
+            FROM updated u
+            INNER JOIN roles r ON u.role_code = r.code
+            "#,
+            user.family_name.map(|f| f.0),
+            user.given_name.map(|g| g.0),
+            user.email.map(|e| e.0),
+            id.0
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        match row {
+            Some(row) => {
+                commit(tx).await?;
+                User::try_from(row)
+            }
+            None => user_not_found(id),
+        }
+    }
+    /*
     async fn update(&self, id: UserId, user: UserInput) -> DomainResult<User> {
         let mut tx = self.begin().await?;
         let row = sqlx::query_as!(
@@ -146,6 +188,7 @@ impl UserRepository for PgUserRepository {
             None => user_not_found(id),
         }
     }
+    */
 
     /// ユーザーの最終ログイン日時を更新して、認証情報を登録するとともに、ログイン失敗履歴を削除する。
     async fn handle_logged_in(

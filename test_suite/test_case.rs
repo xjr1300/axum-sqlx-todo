@@ -154,6 +154,11 @@ impl TestCase {
         let uri = format!("{}/users/me", self.origin());
         self.http_client.get(&uri).send().await.unwrap()
     }
+
+    pub async fn logout(&self) -> reqwest::Response {
+        let uri = format!("{}/users/logout", self.origin());
+        self.http_client.post(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

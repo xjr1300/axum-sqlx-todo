@@ -89,6 +89,7 @@
   - `Secure`: HTTPS通信時のみ付与
   - `SameSite`: `Strict`に設定し、CSRF対策を行う
   - `Max-Age`: 0（クッキーを即時削除）
+- HTTPステータスコード`204 No Content`を返す。
 
 ### 実装方針
 

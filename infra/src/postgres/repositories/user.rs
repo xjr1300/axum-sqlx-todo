@@ -224,7 +224,7 @@ impl UserRepository for PgUserRepository {
     }
 
     /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンのキーを削除する。
-    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<String>> {
+    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<SecretString>> {
         let mut tx = self.begin().await?;
         let rows = sqlx::query!(
             r#"
@@ -238,7 +238,10 @@ impl UserRepository for PgUserRepository {
         .await
         .map_err(repository_error)?;
         commit(tx).await?;
-        Ok(rows.into_iter().map(|row| (row.token_key)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| SecretString::new(row.token_key.into()))
+            .collect())
     }
 
     /// ユーザーのパスワードを取得する。

@@ -43,7 +43,7 @@ pub trait UserRepository {
     async fn user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<UserToken>>;
 
     /// ユーザーがログインしたときに生成したアクセストークンとリフレッシュトークンを削除する。
-    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<String>>;
+    async fn delete_user_tokens_by_id(&self, id: UserId) -> DomainResult<Vec<SecretString>>;
 
     /// ユーザーのパスワードを取得する。
     async fn get_hashed_password(&self, id: UserId) -> DomainResult<PHCString>;

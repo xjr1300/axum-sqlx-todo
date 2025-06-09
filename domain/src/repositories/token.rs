@@ -34,6 +34,9 @@ pub trait TokenRepository: Sync + Send {
     ///
     /// ユーザーIDとトークンの種類
     async fn get_token_content(&self, token: &SecretString) -> DomainResult<Option<TokenContent>>;
+
+    /// 認証情報を削除する。
+    async fn delete_token_content(&self, key: &SecretString) -> DomainResult<()>;
 }
 
 /// トークンコンテンツ

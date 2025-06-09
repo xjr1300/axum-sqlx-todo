@@ -23,9 +23,10 @@ use crate::{
 /// Ensure that a user can register, log in, and retrieve their information
 #[tokio::test]
 #[ignore]
-async fn register_user_and_login_and_me() {
+async fn user_integration_test() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, false).await;
+
     // Register a new user
     let sign_up_requested_at = OffsetDateTime::now_utc();
     let sign_up_request_body = create_sign_up_request_body();
@@ -141,6 +142,56 @@ async fn register_user_and_login_and_me() {
     assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
     assert!((login_requested_at - user.created_at).abs() < REQUEST_TIMEOUT);
     assert!((user.updated_at - login_requested_at).abs() < REQUEST_TIMEOUT);
+
+    // Logout
+    let response = test_case.logout().await;
+    let ResponseParts {
+        status_code,
+        headers,
+        body,
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::NO_CONTENT);
+    let set_cookie_values = headers.get_all(reqwest::header::SET_COOKIE);
+    let mut set_cookies: HashMap<String, Cookie> = HashMap::new();
+    for value in set_cookie_values {
+        let cookie = Cookie::parse(value.to_str().unwrap()).unwrap();
+        set_cookies.insert(cookie.name().to_string(), cookie);
+    }
+    let access_cookie = set_cookies.get(COOKIE_ACCESS_TOKEN_KEY).unwrap();
+    inspect_token_cookie_spec(
+        access_cookie,
+        SameSite::Strict,
+        test_case.app_state.app_settings.http.protocol == HttpProtocol::Https,
+        true,
+        0,
+    );
+    let refresh_cookie = set_cookies.get(COOKIE_REFRESH_TOKEN_KEY).unwrap();
+    inspect_token_cookie_spec(
+        refresh_cookie,
+        SameSite::Strict,
+        test_case.app_state.app_settings.http.protocol == HttpProtocol::Https,
+        true,
+        0,
+    );
+    assert!(body.is_empty());
+    let user_tokens = test_case.user_tokens_from_user_repo(user.id).await;
+    assert!(
+        user_tokens.is_empty(),
+        "User tokens should be deleted after logout"
+    );
+    assert!(
+        test_case
+            .token_content_from_token_repo(&access_token)
+            .await
+            .is_none()
+    );
+    assert!(
+        test_case
+            .token_content_from_token_repo(&refresh_token)
+            .await
+            .is_none()
+    );
+
     test_case.end().await;
 }
 

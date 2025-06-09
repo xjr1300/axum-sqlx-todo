@@ -88,6 +88,12 @@ impl TokenRepository for RedisTokenRepository {
             token_type,
         }))
     }
+
+    /// 認証情報を削除する。
+    async fn delete_token_content(&self, key: &SecretString) -> DomainResult<()> {
+        let mut conn = self.connection().await?;
+        delete(&mut conn, key.expose_secret()).await
+    }
 }
 
 /// Redisにキーと値を保存する。
@@ -119,7 +125,7 @@ async fn store(
         })
 }
 
-/// Redisからキーで値を取得する。
+/// キーを基にRedisから値を取得する。
 async fn retrieve(conn: &mut RedisConnection, key: &str) -> DomainResult<Option<String>> {
     let value: Option<String> = conn.get(key).await.map_err(|e| DomainError {
         kind: DomainErrorKind::Repository,
@@ -127,4 +133,13 @@ async fn retrieve(conn: &mut RedisConnection, key: &str) -> DomainResult<Option<
         source: e.into(),
     })?;
     Ok(value)
+}
+
+/// キーを基にRedisからレコードを削除する。
+async fn delete(conn: &mut RedisConnection, key: &str) -> DomainResult<()> {
+    conn.del(key).await.map_err(|e| DomainError {
+        kind: DomainErrorKind::Repository,
+        messages: vec!["Failed to delete key from redis".into()],
+        source: e.into(),
+    })
 }

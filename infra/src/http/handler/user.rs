@@ -146,6 +146,57 @@ pub async fn login(
     }
 }
 
+/// ログアウトハンドラ
+#[tracing::instrument(skip(app_state))]
+pub async fn logout(
+    State(app_state): State<AppState>,
+    Extension(user): Extension<AuthorizedUser>,
+) -> ApiResult<Response<Body>> {
+    // ユーザーリポジトリからユーザーのハッシュ化されたアクセストークンとリフレッシュトークンを削除
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let token_keys = user_repo
+        .delete_user_tokens_by_id(user.0.id)
+        .await
+        .map_err(internal_server_error)?;
+    // トークンリポジトリから認証情報を削除
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    for key in token_keys.iter() {
+        token_repo.delete_token_content(key).await?;
+    }
+    // レスポンスを作成
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NO_CONTENT;
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        Cookie::build((COOKIE_ACCESS_TOKEN_KEY, ""))
+            .domain(&app_state.app_settings.http.host)
+            .path("/")
+            .http_only(true)
+            .secure(app_state.app_settings.http.protocol == HttpProtocol::Https)
+            .same_site(SameSite::Strict)
+            .max_age(Duration::ZERO)
+            .build()
+            .to_string()
+            .parse::<HeaderValue>()
+            .unwrap(),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        Cookie::build((COOKIE_REFRESH_TOKEN_KEY, ""))
+            .domain(&app_state.app_settings.http.host)
+            .path("/")
+            .http_only(true)
+            .secure(app_state.app_settings.http.protocol == HttpProtocol::Https)
+            .same_site(SameSite::Strict)
+            .max_age(Duration::ZERO)
+            .build()
+            .to_string()
+            .parse::<HeaderValue>()
+            .unwrap(),
+    );
+    Ok(response)
+}
+
 async fn handle_password_matched(
     settings: &AppSettings,
     user_repo: PgUserRepository,

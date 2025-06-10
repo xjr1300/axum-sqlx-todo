@@ -47,12 +47,9 @@ impl From<DomainError> for ApiError {
     }
 }
 
-pub fn internal_server_error<E: std::error::Error>(err: E) -> ApiError {
-    ApiError {
-        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-        messages: vec![err.to_string().into()],
-    }
-}
+/// クッキーに登録するアクセストークンとリフレッシュトークンのキー
+pub const COOKIE_ACCESS_TOKEN_KEY: &str = "access_token";
+pub const COOKIE_REFRESH_TOKEN_KEY: &str = "refresh_token";
 
 pub fn bad_request(message: Cow<'static, str>) -> ApiError {
     ApiError {
@@ -61,13 +58,36 @@ pub fn bad_request(message: Cow<'static, str>) -> ApiError {
     }
 }
 
-pub fn unauthorized(message: Cow<'static, str>) -> ApiError {
+const LOGIN_FAILED_MESSAGE: &str = "Login failed. Please check your email and password";
+
+pub fn login_failed() -> ApiError {
     ApiError {
         status_code: StatusCode::UNAUTHORIZED,
-        messages: vec![message],
+        messages: vec![LOGIN_FAILED_MESSAGE.into()],
     }
 }
 
-/// クッキーに登録するアクセストークンとリフレッシュトークンのキー
-pub const COOKIE_ACCESS_TOKEN_KEY: &str = "access_token";
-pub const COOKIE_REFRESH_TOKEN_KEY: &str = "refresh_token";
+const USER_CREDENTIALS_INVALID_MESSAGE: &str = "User credentials are invalid or missing";
+
+pub fn unauthorized() -> ApiError {
+    ApiError {
+        status_code: StatusCode::UNAUTHORIZED,
+        messages: vec![USER_CREDENTIALS_INVALID_MESSAGE.into()],
+    }
+}
+
+const USER_LOCKED_MESSAGE: &str = "User is locked";
+
+pub fn user_locked() -> ApiError {
+    ApiError {
+        status_code: StatusCode::LOCKED,
+        messages: vec![USER_LOCKED_MESSAGE.into()],
+    }
+}
+
+pub fn internal_server_error<E: std::error::Error>(err: E) -> ApiError {
+    ApiError {
+        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+        messages: vec![err.to_string().into()],
+    }
+}

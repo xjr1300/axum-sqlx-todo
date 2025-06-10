@@ -6,7 +6,7 @@ use axum::{
 use infra::{
     AppState,
     http::{
-        handler::user::{login, logout, me, sign_up, update},
+        handler::user::{login, logout, me, refresh_tokens, sign_up, update},
         middleware::authorized_user_middleware,
     },
 };
@@ -15,6 +15,7 @@ pub fn create_user_routes(app_state: AppState) -> Router<AppState> {
     let router = Router::new()
         .route("/sign-up", post(sign_up))
         .route("/login", post(login))
+        .route("/refresh-tokens", post(refresh_tokens))
         .with_state(app_state.clone());
     let protected_router = Router::new()
         .route("/me", get(me))

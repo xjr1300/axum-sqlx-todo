@@ -19,7 +19,7 @@ use use_case::AuthorizedUser;
 
 use crate::{
     AppState,
-    http::{ApiError, COOKIE_ACCESS_TOKEN_KEY, internal_server_error},
+    http::{ApiError, COOKIE_ACCESS_TOKEN_KEY, internal_server_error, user_locked},
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
 };
@@ -94,10 +94,14 @@ pub async fn authorized_user_middleware(
         }
         .into_response();
     }
+    let user = user.unwrap();
+    if !user.active {
+        // ユーザーがロックされている場合は、423 Lockedを返す
+        return user_locked().into_response();
+    }
+
     // 認証済みユーザーであることが確認できたため、リクエストにユーザー登録
-    request
-        .extensions_mut()
-        .insert(AuthorizedUser(user.unwrap()));
+    request.extensions_mut().insert(AuthorizedUser(user));
     next.run(request).await
 }
 

@@ -7,6 +7,7 @@ use axum::{
     http::{HeaderValue, Response, StatusCode, header},
     response::IntoResponse,
 };
+use axum_extra::extract::CookieJar;
 use cookie::{Cookie, SameSite};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
@@ -18,17 +19,17 @@ use domain::{
     models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
     repositories::{
         TokenRepository as _, TokenType, UpdateUserInput, UserInput, UserRepository,
-        generate_auth_token_info,
+        generate_auth_token_info, generate_auth_token_info_key,
     },
 };
 use use_case::{AuthorizedUser, user::UserUseCase};
-use utils::serde::serialize_secret_string;
+use utils::serde::{deserialize_secret_string, serialize_secret_string};
 
 use crate::{
     AppState,
     http::{
         ApiError, ApiResult, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, bad_request,
-        internal_server_error,
+        internal_server_error, login_failed, unauthorized, user_locked,
     },
     jwt::generate_token_pair,
     password::{create_hashed_password, verify_password},
@@ -126,10 +127,10 @@ pub async fn login(
         .by_email(&email)
         .await
         .map_err(internal_server_error)?
-        .ok_or_else(unauthorized)?;
+        .ok_or_else(login_failed)?;
     // ユーザーのアクティブフラグを確認
     if !user.active {
-        return Err(locked());
+        return Err(user_locked());
     }
     // ユーザーのハッシュ化されたパスワードを取得
     let hashed_password = user_repo
@@ -137,14 +138,19 @@ pub async fn login(
         .await
         .map_err(internal_server_error)?;
     // ユーザーのパスワードを検証
-    let raw_password = RawPassword::new(request_body.password).map_err(|_| unauthorized())?;
+    let raw_password = RawPassword::new(request_body.password).map_err(|_| login_failed())?;
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
-        handle_password_matched(settings, user_repo, token_repo, user.id, requested_at).await
+        generate_tokens_response(settings, user_repo, token_repo, user.id, requested_at).await
     } else {
         handle_password_unmatched(settings, user_repo, user.id, requested_at).await
     }
+}
+
+#[tracing::instrument]
+pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<User>> {
+    Ok(Json(user.0))
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -183,6 +189,62 @@ pub async fn update(
         .await
         .map_err(internal_server_error)?;
     Ok(Json(user))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshTokensRequestBody {
+    #[serde(serialize_with = "serialize_secret_string")]
+    #[serde(deserialize_with = "deserialize_secret_string")]
+    pub refresh_token: SecretString,
+}
+
+/// リフレッシュトークンハンドラ
+#[tracing::instrument(skip(app_state))]
+pub async fn refresh_tokens(
+    cookie_jar: CookieJar,
+    State(app_state): State<AppState>,
+    request_body: Option<Json<RefreshTokensRequestBody>>,
+) -> ApiResult<Response<Body>> {
+    let requested_at = OffsetDateTime::now_utc();
+    // クッキーからリフレッシュトークンを取得
+    let mut refresh_token: Option<SecretString> = None;
+    if let Some(cookie_value) = cookie_jar.get(COOKIE_REFRESH_TOKEN_KEY) {
+        tracing::debug!("Found a refresh token in cookie");
+        refresh_token = Some(SecretString::new(cookie_value.value().into()));
+    }
+    // リクエストボディからリフレッシュトークンを取得
+    if refresh_token.is_none() && request_body.is_some() {
+        tracing::debug!("Found a refresh token in body");
+        refresh_token = Some(request_body.unwrap().0.refresh_token);
+    }
+    // リフレッシュトークンが見つからない場合は、401 Unauthorizedを返す
+    let refresh_token = refresh_token.ok_or_else(unauthorized)?;
+    // トークンリポジトリからリフレッシュトークンをキーに認証情報を取得
+    let settings = &app_state.app_settings;
+    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
+    let token_key = generate_auth_token_info_key(&refresh_token);
+    let token_content = token_repo
+        .get_token_content(&token_key)
+        .await
+        .map_err(internal_server_error)?
+        .ok_or_else(unauthorized)?;
+    if token_content.token_type != TokenType::Refresh {
+        return Err(bad_request("Invalid refresh token".into()));
+    }
+    // ユーザーリポジトリからユーザーを取得
+    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
+    let user = user_repo
+        .by_id(token_content.user_id)
+        .await
+        .map_err(internal_server_error)?;
+    let user = user.ok_or_else(unauthorized)?;
+    // ユーザーがロックされている場合は、423 Lockedを返す
+    if !user.active {
+        return Err(user_locked());
+    }
+    // アクセストークンとリフレッシュトークンを含めたレスポンスを返す
+    generate_tokens_response(settings, user_repo, token_repo, user.id, requested_at).await
 }
 
 /// ログアウトハンドラ
@@ -236,7 +298,7 @@ pub async fn logout(
     Ok(response)
 }
 
-async fn handle_password_matched(
+async fn generate_tokens_response(
     settings: &AppSettings,
     user_repo: PgUserRepository,
     token_repo: RedisTokenRepository,
@@ -352,7 +414,7 @@ async fn handle_password_unmatched(
             }
         }
     }
-    Err(unauthorized())
+    Err(login_failed())
 }
 
 fn create_cookie<'c, N>(
@@ -373,26 +435,4 @@ where
         .same_site(SameSite::Strict)
         .max_age(max_age);
     cookie.build()
-}
-
-const LOGIN_FAILED: &str = "Login failed. Please check your email and password";
-const USER_LOCKED: &str = "User is locked";
-
-fn unauthorized() -> ApiError {
-    ApiError {
-        status_code: StatusCode::UNAUTHORIZED,
-        messages: vec![LOGIN_FAILED.into()],
-    }
-}
-
-fn locked() -> ApiError {
-    ApiError {
-        status_code: StatusCode::LOCKED,
-        messages: vec![USER_LOCKED.into()],
-    }
-}
-
-#[tracing::instrument]
-pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<User>> {
-    Ok(Json(user.0))
 }

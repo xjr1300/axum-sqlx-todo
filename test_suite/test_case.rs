@@ -141,6 +141,15 @@ impl TestCase {
         token_repo.get_token_content(&key).await.unwrap()
     }
 
+    pub async fn set_user_active_status(&self, id: UserId, active: bool) {
+        let mut tx = self.app_state.pg_pool.begin().await.unwrap();
+        sqlx::query!("UPDATE users SET active = $1 WHERE id = $2", active, id.0)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+
     pub async fn sign_up(&self, body: &RawSignUpRequestBody) -> reqwest::Response {
         let uri = format!("{}/users/sign-up", self.origin());
         self.http_client.post(&uri).json(body).send().await.unwrap()
@@ -164,6 +173,11 @@ impl TestCase {
             .send()
             .await
             .unwrap()
+    }
+
+    pub async fn refresh_tokens(&self) -> reqwest::Response {
+        let uri = format!("{}/users/refresh-tokens", self.origin());
+        self.http_client.post(&uri).send().await.unwrap()
     }
 
     pub async fn logout(&self) -> reqwest::Response {

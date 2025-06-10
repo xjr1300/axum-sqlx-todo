@@ -2,7 +2,6 @@ use std::{path::Path, thread::JoinHandle};
 
 use infra::AppState;
 use sqlx::{Connection as _, Executor as _, PgConnection, PgPool};
-// use time::{OffsetDateTime, serde::rfc3339};
 use tokio::{net::TcpListener, sync::oneshot};
 
 use app::{bind_address, create_redis_pool, load_app_settings, routes::create_router};
@@ -20,7 +19,25 @@ pub struct TestApp {
 pub fn load_app_settings_for_testing() -> AppSettings {
     let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
     let path = Path::new(&dir).join("..").join("app_settings.toml");
-    load_app_settings(path.as_os_str().to_str().unwrap()).unwrap()
+    let mut settings = load_app_settings(path.as_os_str().to_str().unwrap()).unwrap();
+    if let Ok(rust_log) = std::env::var("RUST_LOG") {
+        settings.log_level = log_level_from_str(&rust_log);
+    }
+    // let subscriber =
+    //     app::get_subscriber("axum-sqlx-todo".into(), settings.log_level, std::io::stdout);
+    // app::init_subscriber(subscriber);
+    settings
+}
+
+fn log_level_from_str(s: &str) -> log::Level {
+    match s.to_lowercase().as_str() {
+        "error" => log::Level::Error,
+        "warn" => log::Level::Warn,
+        "info" => log::Level::Info,
+        "debug" => log::Level::Debug,
+        "trace" => log::Level::Trace,
+        _ => log::Level::Info,
+    }
 }
 
 pub async fn configure_test_app(mut app_settings: AppSettings) -> TestApp {

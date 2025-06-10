@@ -75,7 +75,7 @@ pub fn generate_token_pair(
 /// # 戻り値
 ///
 /// JWT
-fn generate_token(claim: Claim, secret_key: &SecretString) -> DomainResult<SecretString> {
+pub fn generate_token(claim: Claim, secret_key: &SecretString) -> DomainResult<SecretString> {
     let key: HmacKey = generate_hmac_key(secret_key)?;
     let header = Header {
         algorithm: AlgorithmType::Hs384,

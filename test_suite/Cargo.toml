@@ -15,6 +15,7 @@ cookie = "0.18"
 deadpool-redis.workspace = true
 domain = { path = "../domain" }
 infra = { path = "../infra" }
+log.workspace = true
 reqwest = { version = "0.12", features = ["json", "cookies"] }
 secrecy.workspace = true
 serde.workspace = true

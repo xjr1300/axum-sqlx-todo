@@ -1,5 +1,5 @@
 use garde::Validate as _;
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
@@ -50,6 +50,8 @@ pub struct Todo {
     pub description: Option<TodoDescription>,
     /// 状態
     pub status: TodoStatus,
+    /// 完了予定日
+    pub due_date: Option<Date>,
     /// 完了日時
     pub completed_at: Option<OffsetDateTime>,
     /// アーカイブ済み
@@ -69,6 +71,7 @@ impl Todo {
         title: TodoTitle,
         description: Option<TodoDescription>,
         status: TodoStatus,
+        due_date: Option<Date>,
         completed_at: Option<OffsetDateTime>,
         archived: bool,
         created_at: OffsetDateTime,
@@ -80,6 +83,7 @@ impl Todo {
             title,
             description,
             status,
+            due_date,
             completed_at,
             archived,
             created_at,
@@ -151,7 +155,7 @@ mod tests {
         Role, RoleCode, RoleName,
         user::{Email, FamilyName, GivenName, UserId},
     };
-    use time::macros::datetime;
+    use time::{Duration, macros::datetime};
     use uuid::Uuid;
 
     fn create_user() -> User {
@@ -177,6 +181,7 @@ mod tests {
 
     #[test]
     fn todo_new() {
+        let now = OffsetDateTime::now_utc();
         let id = Uuid::new_v4();
         let user = create_user();
         let todo_id = TodoId::from(id);
@@ -190,9 +195,10 @@ mod tests {
             created_at: OffsetDateTime::now_utc(),
             updated_at: OffsetDateTime::now_utc(),
         };
+        let due_date = Some(now.date() + Duration::days(7));
         let completed_at = None;
-        let created_at = OffsetDateTime::now_utc();
-        let updated_at = created_at;
+        let created_at = now;
+        let updated_at = now;
 
         let todo = Todo::new(
             todo_id,
@@ -200,6 +206,7 @@ mod tests {
             title,
             description,
             status,
+            due_date,
             completed_at,
             false,
             created_at,
@@ -249,6 +256,7 @@ mod tests {
             created_at: OffsetDateTime::now_utc(),
             updated_at: OffsetDateTime::now_utc(),
         };
+        let due_date = Some(created_at.date() + Duration::days(7));
 
         let result = Todo::new(
             todo_id,
@@ -256,6 +264,7 @@ mod tests {
             title,
             description,
             status,
+            due_date,
             completed_at,
             false,
             created_at,

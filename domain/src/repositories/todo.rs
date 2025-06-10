@@ -1,4 +1,4 @@
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 
 use crate::{
     DomainResult,
@@ -12,13 +12,22 @@ pub struct TodoCreate {
     pub title: TodoTitle,
     /// 説明
     pub description: Option<TodoDescription>,
+    /// 完了予定日
+    pub due_date: Option<time::Date>,
 }
 
 pub struct TodoUpdate {
+    /// タイトル
     pub title: TodoTitle,
+    /// 説明
     pub description: Option<TodoDescription>,
+    /// 状態コード
     pub todo_status_code: TodoStatusCode,
+    /// 完了予定日
+    pub due_date: Option<Date>,
+    /// 完了日時
     pub completed_at: Option<OffsetDateTime>,
+    /// アーカイブ済み
     pub archived: bool,
 }
 

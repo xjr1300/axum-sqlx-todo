@@ -4,7 +4,7 @@ use domain::{
     repositories::{TodoCreate, TodoRepository, TodoUpdate},
 };
 use sqlx::PgTransaction;
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 
 use super::{PgRepository, commit, repository_error};
 
@@ -31,10 +31,11 @@ struct TodoRow {
     description: Option<String>,
     todo_status_code: i16,
     todo_status_name: String,
-    todo_description: Option<String>,
-    todo_display_order: i16,
-    todo_created_at: OffsetDateTime,
-    todo_updated_at: OffsetDateTime,
+    todo_status_description: Option<String>,
+    todo_status_display_order: i16,
+    todo_status_created_at: OffsetDateTime,
+    todo_status_updated_at: OffsetDateTime,
+    due_date: Option<Date>,
     completed_at: Option<OffsetDateTime>,
     archived: bool,
     created_at: OffsetDateTime,
@@ -66,10 +67,13 @@ impl TryFrom<TodoRow> for Todo {
         let status = TodoStatus {
             code: row.todo_status_code.try_into()?,
             name: row.todo_status_name.try_into()?,
-            description: row.todo_description.map(|d| d.try_into()).transpose()?,
-            display_order: DisplayOrder(row.todo_display_order),
-            created_at: row.todo_created_at,
-            updated_at: row.todo_updated_at,
+            description: row
+                .todo_status_description
+                .map(|d| d.try_into())
+                .transpose()?,
+            display_order: DisplayOrder(row.todo_status_display_order),
+            created_at: row.todo_status_created_at,
+            updated_at: row.todo_status_updated_at,
         };
 
         Todo::new(
@@ -78,6 +82,7 @@ impl TryFrom<TodoRow> for Todo {
             row.title.try_into()?,
             row.description.map(|d| d.try_into()).transpose()?,
             status,
+            row.due_date,
             row.completed_at,
             row.archived,
             row.created_at,
@@ -96,11 +101,11 @@ impl TodoRepository for PgTodoRepository {
             r#"
             WITH inserted AS (
                 INSERT INTO todos (
-                    user_id, title, description, completed_at, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    user_id, title, description, due_date, completed_at, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 RETURNING
                     id, user_id, title, description, todo_status_code,
-                    completed_at, archived, created_at, updated_at
+                    due_date, completed_at, archived, created_at, updated_at
             )
             SELECT
                 t.id, t.user_id,
@@ -109,9 +114,9 @@ impl TodoRepository for PgTodoRepository {
                 r.created_at role_created_at, r.updated_at role_updated_at,
                 u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
-                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
-                t.completed_at, t.archived, t.created_at, t.updated_at
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
             FROM inserted t
             INNER JOIN users u ON t.user_id = u.id
             INNER JOIN roles r ON u.role_code = r.code
@@ -120,6 +125,7 @@ impl TodoRepository for PgTodoRepository {
             todo.user_id.0,
             todo.title.0,
             todo.description.map(|d| d.0),
+            todo.due_date,
             None::<OffsetDateTime> // completed_at is None for new todos
         )
         .fetch_one(&mut *tx)
@@ -140,9 +146,9 @@ impl TodoRepository for PgTodoRepository {
                 r.created_at role_created_at, r.updated_at role_updated_at,
                 u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
-                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
-                t.completed_at, t.archived, t.created_at, t.updated_at
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
             FROM todos t
             INNER JOIN users u ON t.user_id = u.id
             INNER JOIN roles r ON u.role_code = r.code
@@ -169,13 +175,14 @@ impl TodoRepository for PgTodoRepository {
                     title = $1,
                     description = $2,
                     todo_status_code = $3,
-                    completed_at = $4,
-                    archived = $5,
+                    due_date = $4,
+                    completed_at = $5,
+                    archived = $6,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $6
+                WHERE id = $7
                 RETURNING
                     id, user_id, title, description, todo_status_code,
-                    completed_at, archived, created_at, updated_at
+                    due_date, completed_at, archived, created_at, updated_at
             )
             SELECT
                 t.id, t.user_id,
@@ -184,9 +191,9 @@ impl TodoRepository for PgTodoRepository {
                 r.created_at role_created_at, r.updated_at role_updated_at,
                 u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
-                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
-                t.completed_at, t.archived, t.created_at, t.updated_at
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
             FROM updated t
             INNER JOIN users u ON t.user_id = u.id
             INNER JOIN roles r ON u.role_code = r.code
@@ -195,6 +202,7 @@ impl TodoRepository for PgTodoRepository {
             todo.title.0,
             todo.description.map(|d| d.0),
             todo.todo_status_code.0,
+            todo.due_date,
             todo.completed_at,
             todo.archived,
             id.0
@@ -223,7 +231,7 @@ impl TodoRepository for PgTodoRepository {
                     id = $1
                 RETURNING
                     id, user_id, title, description, todo_status_code,
-                    completed_at, archived, created_at, updated_at
+                    due_date, completed_at, archived, created_at, updated_at
             )
             SELECT
                 t.id, t.user_id,
@@ -232,9 +240,9 @@ impl TodoRepository for PgTodoRepository {
                 r.created_at role_created_at, r.updated_at role_updated_at,
                 u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
-                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
-                t.completed_at, t.archived, t.created_at, t.updated_at
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
             FROM updated t
             INNER JOIN users u ON t.user_id = u.id
             INNER JOIN roles r ON u.role_code = r.code
@@ -266,7 +274,7 @@ impl TodoRepository for PgTodoRepository {
                     id = $2
                 RETURNING
                     id, user_id, title, description, todo_status_code,
-                    completed_at, archived, created_at, updated_at
+                    due_date, completed_at, archived, created_at, updated_at
             )
             SELECT
                 t.id, t.user_id,
@@ -275,9 +283,9 @@ impl TodoRepository for PgTodoRepository {
                 r.created_at role_created_at, r.updated_at role_updated_at,
                 u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
                 t.title, t.description,
-                t.todo_status_code, ts.name todo_status_name, ts.description todo_description,
-                ts.display_order todo_display_order, ts.created_at todo_created_at, ts.updated_at todo_updated_at,
-                t.completed_at, t.archived, t.created_at, t.updated_at
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
             FROM updated t
             INNER JOIN users u ON t.user_id = u.id
             INNER JOIN roles r ON u.role_code = r.code

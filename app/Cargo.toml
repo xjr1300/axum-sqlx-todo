@@ -13,7 +13,6 @@ infra = { path = "../infra" }
 log.workspace = true
 secrecy.workspace = true
 serde.workspace = true
-settings = { path = "../settings" }
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true

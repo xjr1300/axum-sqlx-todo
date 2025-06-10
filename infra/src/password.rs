@@ -8,7 +8,8 @@ use domain::{
     DomainError, DomainErrorKind, DomainResult,
     models::{PHCString, RawPassword},
 };
-use settings::PasswordSettings;
+
+use crate::settings::PasswordSettings;
 
 /// パスワードをハッシュ化して、PHC文字列を生成する。
 ///

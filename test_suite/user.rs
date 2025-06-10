@@ -3,7 +3,6 @@ use std::{collections::HashMap, sync::Arc};
 use cookie::{Cookie, SameSite};
 use reqwest::{StatusCode, Url};
 use secrecy::{ExposeSecret as _, SecretString};
-use settings::HttpProtocol;
 use sqlx::types::time::OffsetDateTime;
 use time::Duration;
 
@@ -17,6 +16,7 @@ use infra::{
         handler::user::{RefreshTokensRequestBody, UpdateUserRequestBody},
     },
     jwt::{Claim, generate_token},
+    settings::HttpProtocol,
 };
 
 use crate::{

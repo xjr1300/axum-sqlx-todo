@@ -5,7 +5,7 @@ use sqlx::{Connection as _, Executor as _, PgConnection, PgPool};
 use tokio::{net::TcpListener, sync::oneshot};
 
 use app::{bind_address, create_redis_pool, load_app_settings, routes::create_router};
-use settings::{AppSettings, DatabaseSettings};
+use infra::settings::{AppSettings, DatabaseSettings};
 
 pub const TEST_DATABASE_PREFIX: &str = "test_todo_db_";
 

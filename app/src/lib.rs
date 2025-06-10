@@ -13,7 +13,7 @@ use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
 use tracing_subscriber::{EnvFilter, Registry, fmt::MakeWriter, layer::SubscriberExt as _};
 
-use settings::{AppSettings, DatabaseSettings, HttpSettings, RedisSettings};
+use infra::settings::{AppSettings, DatabaseSettings, HttpSettings, RedisSettings};
 
 pub fn load_app_settings(path: &str) -> anyhow::Result<AppSettings> {
     let config = Config::builder()

@@ -16,7 +16,6 @@ use std::{thread::JoinHandle, time::Duration};
 
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-use settings::AppSettings;
 use tokio::sync::oneshot;
 
 use domain::{
@@ -27,7 +26,7 @@ use domain::{
 };
 use infra::{
     AppState, http::handler::user::UpdateUserRequestBody, postgres::repositories::PgUserRepository,
-    redis::token::RedisTokenRepository,
+    redis::token::RedisTokenRepository, settings::AppSettings,
 };
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};

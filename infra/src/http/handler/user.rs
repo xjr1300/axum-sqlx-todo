@@ -11,7 +11,6 @@ use axum_extra::extract::CookieJar;
 use cookie::{Cookie, SameSite};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
-use settings::{AppSettings, HttpProtocol};
 use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
@@ -35,6 +34,7 @@ use crate::{
     password::{create_hashed_password, verify_password},
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
+    settings::{AppSettings, HttpProtocol},
 };
 
 type UserUseCaseImpl = UserUseCase<PgUserRepository, RedisTokenRepository>;

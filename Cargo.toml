@@ -1,6 +1,6 @@
 
 [workspace]
-members = ["app", "domain", "infra", "settings", "test_suite", "use_case", "utils"]
+members = ["app", "domain", "infra", "test_suite", "use_case", "utils"]
 resolver = "3"
 
 [workspace.dependencies]

@@ -3,6 +3,7 @@ pub mod jwt;
 pub mod password;
 pub mod postgres;
 pub mod redis;
+pub mod settings;
 
 use settings::AppSettings;
 

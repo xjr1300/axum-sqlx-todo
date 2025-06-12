@@ -10,7 +10,8 @@ use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_d
 
 use super::primitives::Id;
 use crate::{
-    DomainError, DomainErrorKind, DomainResult, impl_int_primitive, impl_string_primitive,
+    DomainError, DomainErrorKind, DomainResult, domain_error, impl_int_primitive,
+    impl_string_primitive,
     models::primitives::{Description, DisplayOrder},
     starts_or_ends_with_whitespace,
 };
@@ -99,30 +100,24 @@ impl RawPassword {
         }
         // 大文字のアルファベットが含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_uppercase()) {
-            let message = "The password must contain an uppercase letter";
-            return Err(DomainError {
-                kind: DomainErrorKind::Validation,
-                messages: vec![message.into()],
-                source: anyhow::anyhow!(message),
-            });
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "The password must contain an uppercase letter",
+            ));
         }
         // 小文字のアルファベットが含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_lowercase()) {
-            let message = "The password must contain an lowercase letter";
-            return Err(DomainError {
-                kind: DomainErrorKind::Validation,
-                messages: vec![message.into()],
-                source: anyhow::anyhow!(message),
-            });
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "The password must contain an lowercase letter",
+            ));
         }
         // 数字が含まれるか確認
         if !value.chars().any(|ch| ch.is_ascii_digit()) {
-            let message = "The password must contain a digit";
-            return Err(DomainError {
-                kind: DomainErrorKind::Validation,
-                messages: vec![message.into()],
-                source: anyhow::anyhow!(message),
-            });
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "The password must contain a digit",
+            ));
         }
         // シンボルが含まれるか確認
         if !value
@@ -164,12 +159,10 @@ impl PHCString {
     pub fn new(value: SecretString) -> DomainResult<Self> {
         let value = value.expose_secret();
         if value.is_empty() || value.len() > 255 {
-            let message = "The length of PHC strings should be less or equal to 255 characters";
-            return Err(DomainError {
-                kind: DomainErrorKind::Unexpected,
-                messages: vec![message.into()],
-                source: anyhow::anyhow!(message),
-            });
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "The length of PHC strings should be less or equal to 255 characters",
+            ));
         }
         Ok(Self(SecretString::new(value.into())))
     }

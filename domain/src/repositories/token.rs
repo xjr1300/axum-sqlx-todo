@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::models::UserId;
-use crate::{DomainError, DomainErrorKind, DomainResult};
+use crate::{DomainError, DomainErrorKind, DomainResult, domain_error};
 
 /// トークンリポジトリ
 #[async_trait]
@@ -132,11 +132,9 @@ const TOKEN_TYPE_INVALID: &str = "The token type in the redis value is invalid";
 pub fn divide_auth_token_info(value: &str) -> DomainResult<(UserId, TokenType)> {
     let mut values = value.split(':');
     // ユーザーIDを取得
-    let user_id = values.next().ok_or_else(|| DomainError {
-        kind: DomainErrorKind::Unexpected,
-        messages: vec![USER_ID_NOT_FOUND.into()],
-        source: anyhow::anyhow!(USER_ID_NOT_FOUND),
-    })?;
+    let user_id = values
+        .next()
+        .ok_or_else(|| domain_error(DomainErrorKind::Unexpected, USER_ID_NOT_FOUND))?;
     let user_id = Uuid::from_str(user_id).map_err(|_| DomainError {
         kind: DomainErrorKind::Unexpected,
         messages: vec![USER_ID_INVALID.into()],
@@ -145,16 +143,11 @@ pub fn divide_auth_token_info(value: &str) -> DomainResult<(UserId, TokenType)> 
     let user_id = UserId::from(user_id);
     // トークンの種類を取得
 
-    let token_type = values.next().ok_or_else(|| DomainError {
-        kind: DomainErrorKind::Unexpected,
-        messages: vec![TOKEN_TYPE_NOT_FOUND.into()],
-        source: anyhow::anyhow!(TOKEN_TYPE_NOT_FOUND),
-    })?;
-    let token_type = TokenType::try_from(token_type).map_err(|_| DomainError {
-        kind: DomainErrorKind::Unexpected,
-        messages: vec![TOKEN_TYPE_INVALID.into()],
-        source: anyhow::anyhow!(TOKEN_TYPE_INVALID),
-    })?;
+    let token_type = values
+        .next()
+        .ok_or_else(|| domain_error(DomainErrorKind::Unexpected, TOKEN_TYPE_NOT_FOUND))?;
+    let token_type = TokenType::try_from(token_type)
+        .map_err(|_| domain_error(DomainErrorKind::Unexpected, TOKEN_TYPE_INVALID))?;
     Ok((user_id, token_type))
 }
 

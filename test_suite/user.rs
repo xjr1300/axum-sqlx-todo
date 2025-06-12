@@ -22,7 +22,8 @@ use infra::{
 use crate::{
     helpers::{ResponseParts, load_app_settings_for_testing, split_response},
     test_case::{
-        REQUEST_TIMEOUT, RawLoginRequestBody, RawLoginResponseBody, RawSignUpRequestBody, TestCase,
+        EnableTracing, InsertTestData, REQUEST_TIMEOUT, RawLoginRequestBody, RawLoginResponseBody,
+        RawSignUpRequestBody, TestCase,
     },
 };
 
@@ -31,7 +32,7 @@ use crate::{
 #[ignore]
 async fn user_integration_test() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     // Register a new user
     let sign_up_requested_at = OffsetDateTime::now_utc();
@@ -209,7 +210,7 @@ async fn user_integration_test() {
 #[ignore]
 async fn user_can_not_login_with_invalid_credentials() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let request_body: RawLoginRequestBody = sign_up_body.clone().into();
@@ -246,7 +247,7 @@ async fn user_can_not_login_with_invalid_credentials() {
 #[ignore]
 async fn user_can_not_login_when_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;
@@ -263,7 +264,7 @@ async fn user_can_not_login_when_user_is_locked() {
 #[ignore]
 async fn user_is_not_locked_after_user_attempts_to_login_in_max_attempt_times() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let correct_credential: RawLoginRequestBody = sign_up_body.into();
@@ -297,7 +298,7 @@ async fn user_is_not_locked_after_user_attempts_to_login_in_max_attempt_times() 
 #[ignore]
 async fn user_is_locked_after_use_attempts_to_login_exceeding_max_attempts() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let correct_credential: RawLoginRequestBody = sign_up_body.into();
@@ -335,7 +336,7 @@ async fn user_can_login_after_user_attempts_to_login_in_max_attempt_times() {
     // Set the maximum login attempts times to 1 and the maximum login attempts seconds to 1
     app_settings.login.max_attempts = 1;
     app_settings.login.attempts_seconds = 1;
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let correct_credential: RawLoginRequestBody = sign_up_body.into();
@@ -366,7 +367,7 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
     let mut app_settings = load_app_settings_for_testing();
     app_settings.login.max_attempts = 2;
     app_settings.login.attempts_seconds = 2;
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let correct_credential: RawLoginRequestBody = sign_up_body.into();
@@ -402,7 +403,7 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
 #[ignore]
 async fn user_can_not_get_user_information_when_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (_, user, ..) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;
@@ -424,7 +425,7 @@ async fn user_can_not_get_user_information_when_user_is_locked() {
 #[ignore]
 async fn anonymous_user_can_not_access_user_information_endpoint() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let response = test_case.me().await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -437,7 +438,7 @@ async fn anonymous_user_can_not_access_user_information_endpoint() {
 #[ignore]
 async fn user_can_update_user_information_with_credentials() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
     let request_body: RawLoginRequestBody = sign_up_body.clone().into();
@@ -536,7 +537,7 @@ async fn user_can_update_user_information_with_credentials() {
 #[ignore]
 async fn anonymous_user_can_update_user_information() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let response = test_case.me().await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -549,7 +550,7 @@ async fn anonymous_user_can_update_user_information() {
 #[ignore]
 async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_cookie() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let _ = create_user_and_login(&test_case).await;
     let response = test_case.refresh_tokens().await;
@@ -579,7 +580,7 @@ async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_cookie() {
 #[ignore]
 async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_body() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (_, _, tokens) = create_user_and_login(&test_case).await;
 
@@ -609,7 +610,7 @@ async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_body() {
 #[ignore]
 async fn user_can_not_refresh_tokens_without_refresh_token() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let _ = create_user_and_login(&test_case).await;
 
@@ -635,7 +636,8 @@ async fn user_can_not_refresh_tokens_without_refresh_token() {
 #[ignore]
 async fn user_can_not_refresh_tokens_invalid_refresh_token_in_the_cookie() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings.clone(), false).await;
+    let test_case =
+        TestCase::begin(app_settings.clone(), EnableTracing::No, InsertTestData::No).await;
 
     let (_, user, _) = create_user_and_login(&test_case).await;
     let claim = Claim {
@@ -681,7 +683,7 @@ async fn user_can_not_refresh_tokens_refresh_token_was_expired() {
     let mut app_settings = load_app_settings_for_testing();
     // Set the refresh token expiration to 1 second
     app_settings.token.refresh_max_age = 1;
-    let test_case = TestCase::begin(app_settings.clone(), false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let _ = create_user_and_login(&test_case).await;
     // Wait for the refresh token to expire
@@ -697,7 +699,8 @@ async fn user_can_not_refresh_tokens_refresh_token_was_expired() {
 #[ignore]
 async fn user_can_not_refresh_tokens_with_access_token_in_the_cookie() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings.clone(), false).await;
+    let test_case =
+        TestCase::begin(app_settings.clone(), EnableTracing::No, InsertTestData::No).await;
 
     let (.., tokens) = create_user_and_login(&test_case).await;
     let url = Url::parse(&format!(
@@ -727,7 +730,7 @@ async fn user_can_not_refresh_tokens_with_access_token_in_the_cookie() {
 #[ignore]
 async fn user_can_not_refresh_tokens_when_the_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let (_, user, _) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;

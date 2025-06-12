@@ -3,27 +3,15 @@ pub mod routes;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use config::Config;
 use deadpool_redis::Config as RedisConfig;
 use sqlx::postgres::PgPoolOptions;
-
 use tokio::net::TcpListener;
 use tracing::{Subscriber, subscriber::set_global_default};
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
 use tracing_subscriber::{EnvFilter, Registry, fmt::MakeWriter, layer::SubscriberExt as _};
 
-use infra::settings::{AppSettings, DatabaseSettings, HttpSettings, RedisSettings};
-
-pub fn load_app_settings(path: &str) -> anyhow::Result<AppSettings> {
-    let config = Config::builder()
-        .add_source(config::File::with_name(path))
-        .build()
-        .context("Failed to read the app_settings.toml file")?;
-    config
-        .try_deserialize()
-        .context("The contents of the app_settings.toml file is incorrect")
-}
+use infra::settings::{DatabaseSettings, HttpSettings, RedisSettings};
 
 pub async fn bind_address(settings: &HttpSettings) -> anyhow::Result<(TcpListener, u16)> {
     let listener = TcpListener::bind(settings.bind_address())

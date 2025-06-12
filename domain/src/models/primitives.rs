@@ -32,6 +32,12 @@ impl<T> From<Uuid> for Id<T> {
     }
 }
 
+impl<T> PartialEq<Uuid> for Id<T> {
+    fn eq(&self, other: &Uuid) -> bool {
+        self.0 == *other
+    }
+}
+
 impl<T> Serialize for Id<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -95,6 +101,12 @@ macro_rules! impl_string_primitive {
             }
         }
 
+        impl std::cmp::PartialEq<&str> for $name {
+            fn eq(&self, other: &&str) -> bool {
+                self.0 == *other
+            }
+        }
+
         impl serde::ser::Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
             where
@@ -144,6 +156,12 @@ macro_rules! impl_int_primitive {
 
             fn try_from(value: $ty) -> Result<Self, Self::Error> {
                 Self::new(value)
+            }
+        }
+
+        impl std::cmp::PartialEq<$ty> for $name {
+            fn eq(&self, other: &$ty) -> bool {
+                self.0 == *other
             }
         }
 

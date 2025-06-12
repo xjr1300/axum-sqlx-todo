@@ -1,5 +1,8 @@
 use garde::Validate as _;
+use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
+
+use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_datetime};
 
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
@@ -38,7 +41,7 @@ impl_string_primitive!(TodoStatusName);
 /// - 完了したTodoは更新できない。
 ///   - したがって、完了時に更新日時を更新するため、完了日時は更新日時と同でなくてはならない。
 /// - アーカイブされたTodoは、更新できない。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Todo {
     /// ID
     pub id: TodoId,
@@ -53,12 +56,16 @@ pub struct Todo {
     /// 完了予定日
     pub due_date: Option<Date>,
     /// 完了日時
+    #[serde(serialize_with = "serialize_option_offset_datetime")]
+    #[serde(deserialize_with = "deserialize_option_offset_datetime")]
     pub completed_at: Option<OffsetDateTime>,
     /// アーカイブ済み
     pub archived: bool,
     /// 作成日時
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     /// 更新日時
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -132,7 +139,7 @@ impl Todo {
 }
 
 /// Todo状態
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TodoStatus {
     /// Todo状態コード
     pub code: TodoStatusCode,
@@ -143,8 +150,10 @@ pub struct TodoStatus {
     /// Todo状態の順序
     pub display_order: DisplayOrder,
     /// Todo状態の作成日時
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     /// Todo状態の更新日時
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
 

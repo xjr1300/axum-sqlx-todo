@@ -1,14 +1,18 @@
 mod helpers;
 mod test_case;
+mod todo;
 mod user;
 
-use crate::{helpers::load_app_settings_for_testing, test_case::TestCase};
+use crate::{
+    helpers::load_app_settings_for_testing,
+    test_case::{EnableTracing, InsertTestData, TestCase},
+};
 
 #[tokio::test]
 #[ignore]
 async fn health_check() {
     let app_settings = load_app_settings_for_testing();
-    let test_case = TestCase::begin(app_settings, false).await;
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
     let uri = format!("{}/health-check", test_case.origin());
     let response = test_case.http_client.get(&uri).send().await.unwrap();

@@ -80,8 +80,8 @@ INSERT INTO todo_statuses (code, name, description, display_order) VALUES
 
 -- table: todos
 CREATE TABLE IF NOT EXISTS todos (
-    id uuid NOT NULL DEFAULT uuid_generate_v4(),
-    user_id uuid NOT NULL,
+    id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL,
     title VARCHAR(100) NOT NULL,
     description VARCHAR(400),
     todo_status_code SMALLINT NOT NULL DEFAULT 1,

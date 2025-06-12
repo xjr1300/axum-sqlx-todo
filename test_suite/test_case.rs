@@ -18,6 +18,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
+use app::{get_subscriber, init_subscriber};
 use domain::{
     models::{LoginFailedHistory, User, UserId},
     repositories::{
@@ -25,8 +26,11 @@ use domain::{
     },
 };
 use infra::{
-    AppState, http::handler::user::UpdateUserRequestBody, postgres::repositories::PgUserRepository,
-    redis::token::RedisTokenRepository, settings::AppSettings,
+    AppState,
+    http::handler::{todo::TodoListQueryParams, user::UpdateUserRequestBody},
+    postgres::repositories::PgUserRepository,
+    redis::token::RedisTokenRepository,
+    settings::AppSettings,
 };
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};
@@ -60,13 +64,41 @@ pub struct TestCase {
     pub app_state: AppState,
     app_handle: JoinHandle<()>,
     shutdown_signal: oneshot::Sender<()>,
-    log: bool,
     pub http_client: reqwest::Client,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnableTracing {
+    Yes,
+    No,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertTestData {
+    Yes,
+    No,
+}
+
 impl TestCase {
-    pub async fn begin(app_settings: AppSettings, log: bool) -> Self {
-        let app = configure_test_app(app_settings).await;
+    pub async fn begin(
+        app_settings: AppSettings,
+        tracing: EnableTracing,
+        insertion: InsertTestData,
+    ) -> Self {
+        let app = configure_test_app(app_settings.clone()).await;
+        if insertion == InsertTestData::Yes {
+            // Insert test data into the database if required
+            let content = std::fs::read_to_string("./fixtures/test.sql").unwrap();
+            sqlx::raw_sql(&content).execute(&app.pg_pool).await.unwrap();
+        }
+        if tracing == EnableTracing::Yes {
+            let subscriber = get_subscriber(
+                "axum-sqlx-todo".into(),
+                app_settings.log_level,
+                std::io::stdout,
+            );
+            init_subscriber(subscriber);
+        }
         let TestApp {
             app_settings,
             listener,
@@ -88,23 +120,16 @@ impl TestCase {
             app_state,
             app_handle,
             shutdown_signal,
-            log,
             http_client,
         }
     }
 
     pub async fn end(self) {
-        if self.log {
-            println!("Sending graceful shutdown signal...");
-        }
+        tracing::trace!("Sending graceful shutdown signal...");
         self.shutdown_signal.send(()).unwrap();
-        if self.log {
-            println!("Waiting for server to gracefully shutdown...");
-        }
+        tracing::trace!("Waiting for server to gracefully shutdown...");
         self.app_handle.join().unwrap();
-        if self.log {
-            println!("Server has gracefully shutdown.");
-        }
+        tracing::trace!("Server has gracefully shutdown.");
     }
 
     pub fn origin(&self) -> String {
@@ -182,6 +207,34 @@ impl TestCase {
     pub async fn logout(&self) -> reqwest::Response {
         let uri = format!("{}/users/logout", self.origin());
         self.http_client.post(&uri).send().await.unwrap()
+    }
+
+    pub async fn login_taro(&self) {
+        let body = RawLoginRequestBody {
+            email: String::from("taro@example.com"),
+            password: String::from("ab12AB#$"),
+        };
+        let response = self.login(&body).await;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::OK,
+            "Taro login failed: {}",
+            response.text().await.unwrap()
+        );
+    }
+
+    pub async fn todo_list(&self, body: Option<TodoListQueryParams>) -> reqwest::Response {
+        println!("body statuses: {:?}", body);
+        let uri = format!("{}/todos", self.origin());
+        match body {
+            Some(body) => {
+                let params = body.to_string();
+                let uri = format!("{}?{}", uri, params);
+                println!("uri: {}", uri);
+                self.http_client.get(&uri).send().await.unwrap()
+            }
+            None => self.http_client.get(&uri).send().await.unwrap(),
+        }
     }
 }
 

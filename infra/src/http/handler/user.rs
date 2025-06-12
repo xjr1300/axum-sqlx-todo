@@ -128,10 +128,12 @@ pub async fn login(
         .await
         .map_err(internal_server_error)?
         .ok_or_else(login_failed)?;
+    tracing::debug!("User found: {}", user.email);
     // ユーザーのアクティブフラグを確認
     if !user.active {
         return Err(user_locked());
     }
+    tracing::debug!("User is active: {}", user.email);
     // ユーザーのハッシュ化されたパスワードを取得
     let hashed_password = user_repo
         .get_hashed_password(user.id)
@@ -142,6 +144,7 @@ pub async fn login(
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
+        tracing::debug!("Password is correct: {}", user.email);
         generate_tokens_response(settings, user_repo, token_repo, user.id, requested_at).await
     } else {
         handle_password_unmatched(settings, user_repo, user.id, requested_at).await

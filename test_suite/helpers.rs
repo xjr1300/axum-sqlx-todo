@@ -1,13 +1,21 @@
 use std::{path::Path, thread::JoinHandle};
 
-use infra::AppState;
 use sqlx::{Connection as _, Executor as _, PgConnection, PgPool};
 use tokio::{net::TcpListener, sync::oneshot};
 
-use app::{bind_address, create_redis_pool, load_app_settings, routes::create_router};
-use infra::settings::{AppSettings, DatabaseSettings};
+use app::{bind_address, create_redis_pool, routes::create_router};
+use infra::{
+    AppState,
+    settings::{AppSettings, DatabaseSettings, load_app_settings},
+};
 
 pub const TEST_DATABASE_PREFIX: &str = "test_todo_db_";
+
+// use once_cell::sync::Lazy;
+// use uuid::Uuid;
+// use domain::models::UserId;
+// pub static TARO_USER_ID: Lazy<UserId> =
+//     Lazy::new(|| UserId::from(Uuid::parse_str("47125c09-1dea-42b2-a14e-357e59acf3dc").unwrap()));
 
 pub struct TestApp {
     pub app_settings: AppSettings,

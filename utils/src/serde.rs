@@ -1,5 +1,7 @@
+use std::{fmt::Display, str::FromStr};
+
 use secrecy::{ExposeSecret as _, SecretString};
-use serde::{Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, de::Error};
 use time::{OffsetDateTime, serde::rfc3339};
 
 pub fn serialize_option_offset_datetime<S>(
@@ -41,4 +43,37 @@ where
 {
     let value: String = String::deserialize(deserializer)?;
     Ok(SecretString::new(value.into()))
+}
+
+pub fn deserialize_split_comma<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    let s = String::deserialize(deserializer)?;
+    let value = s
+        .split(',')
+        .map(|x| T::from_str(x.trim()))
+        .collect::<Result<Vec<T>, _>>()
+        .map_err(Error::custom)?;
+    Ok(value)
+}
+
+pub fn deserialize_option_split_comma<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    #[derive(Deserialize)]
+    struct Wrapper<T>(#[serde(deserialize_with = "deserialize_split_comma")] Vec<T>)
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display;
+
+    let value: Option<Wrapper<T>> = Option::deserialize(deserializer)?;
+    Ok(value.map(|Wrapper(dt)| dt))
 }

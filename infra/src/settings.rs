@@ -1,7 +1,19 @@
+use anyhow::Context as _;
+use config::Config;
 use log::Level as LogLevel;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+
+pub fn load_app_settings(path: &str) -> anyhow::Result<AppSettings> {
+    let config = Config::builder()
+        .add_source(config::File::with_name(path))
+        .build()
+        .context("Failed to read the app_settings.toml file")?;
+    config
+        .try_deserialize()
+        .context("The contents of the app_settings.toml file is incorrect")
+}
 
 /// アプリケーション設定
 #[derive(Debug, Clone, Deserialize)]

@@ -1,3 +1,4 @@
+pub mod todo;
 pub mod user;
 
 use domain::models::User;

@@ -1,10 +1,10 @@
 use anyhow::Context as _;
 
-use infra::AppState;
+use infra::{AppState, settings::load_app_settings};
 
 use app::{
     bind_address, create_pg_pool, create_redis_pool, get_subscriber, init_subscriber,
-    load_app_settings, routes::create_router,
+    routes::create_router,
 };
 
 /// アプリケーションエントリーポイント

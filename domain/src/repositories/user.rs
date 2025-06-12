@@ -7,20 +7,6 @@ use crate::{
     models::{Email, FamilyName, GivenName, LoginFailedHistory, PHCString, User, UserId},
 };
 
-#[derive(Debug, Clone)]
-pub struct UserInput {
-    pub family_name: FamilyName,
-    pub given_name: GivenName,
-    pub email: Email,
-}
-
-#[derive(Debug, Clone)]
-pub struct UpdateUserInput {
-    pub family_name: Option<FamilyName>,
-    pub given_name: Option<GivenName>,
-    pub email: Option<Email>,
-}
-
 #[async_trait::async_trait]
 pub trait UserRepository {
     /// ユーザーを新規作成する。
@@ -97,6 +83,20 @@ pub trait UserRepository {
         user_id: UserId,
         attempted_at: OffsetDateTime,
     ) -> DomainResult<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct UserInput {
+    pub family_name: FamilyName,
+    pub given_name: GivenName,
+    pub email: Email,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateUserInput {
+    pub family_name: Option<FamilyName>,
+    pub given_name: Option<GivenName>,
+    pub email: Option<Email>,
 }
 
 pub struct UserToken {

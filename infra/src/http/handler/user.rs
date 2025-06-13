@@ -21,14 +21,14 @@ use domain::{
         generate_auth_token_info, generate_auth_token_info_key,
     },
 };
-use use_case::{AuthorizedUser, user::UserUseCase};
+use use_case::AuthorizedUser;
 use utils::serde::{deserialize_secret_string, serialize_secret_string};
 
 use crate::{
     AppState,
     http::{
         ApiError, ApiResult, COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY, bad_request,
-        internal_server_error, login_failed, unauthorized, user_locked,
+        handler::user_use_case, internal_server_error, login_failed, unauthorized, user_locked,
     },
     jwt::generate_token_pair,
     password::{create_hashed_password, verify_password},
@@ -36,14 +36,6 @@ use crate::{
     redis::token::RedisTokenRepository,
     settings::{AppSettings, HttpProtocol},
 };
-
-type UserUseCaseImpl = UserUseCase<PgUserRepository, RedisTokenRepository>;
-
-fn user_use_case(app_state: &AppState) -> UserUseCaseImpl {
-    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
-    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    UserUseCase::new(user_repo, token_repo)
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -152,8 +144,13 @@ pub async fn login(
 }
 
 #[tracing::instrument]
-pub async fn me(Extension(user): Extension<AuthorizedUser>) -> ApiResult<Json<User>> {
-    Ok(Json(user.0))
+pub async fn me(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+) -> ApiResult<Json<User>> {
+    let use_case = user_use_case(&app_state);
+    let user = use_case.me(auth_user);
+    Ok(Json(user))
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -180,15 +177,13 @@ impl TryFrom<UpdateUserRequestBody> for UpdateUserInput {
 #[tracing::instrument(skip(app_state))]
 pub async fn update(
     State(app_state): State<AppState>,
-    Extension(user): Extension<AuthorizedUser>,
+    Extension(auth_user): Extension<AuthorizedUser>,
     Json(request_body): Json<UpdateUserRequestBody>,
 ) -> ApiResult<Json<User>> {
     let input = UpdateUserInput::try_from(request_body)?;
-    let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
-    let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    let use_case = UserUseCase::new(user_repo, token_repo);
+    let use_case = user_use_case(&app_state);
     let user = use_case
-        .update(user.0.id, input)
+        .update(auth_user, input)
         .await
         .map_err(internal_server_error)?;
     Ok(Json(user))

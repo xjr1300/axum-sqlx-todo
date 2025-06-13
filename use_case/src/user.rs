@@ -1,8 +1,10 @@
 use domain::{
     DomainResult,
-    models::{PHCString, User, UserId},
+    models::{PHCString, User},
     repositories::{TokenRepository, UpdateUserInput, UserInput, UserRepository},
 };
+
+use crate::AuthorizedUser;
 /// ユーザーユースケース
 pub struct UserUseCase<UR, TR>
 where
@@ -37,9 +39,18 @@ where
         self.user_repo.create(input, hashed_password).await
     }
 
+    /// ユーザー自信の情報を取得する。
+    pub fn me(&self, auth_user: AuthorizedUser) -> User {
+        auth_user.0
+    }
+
     /// ユーザーを更新する。
-    pub async fn update(&self, user_id: UserId, input: UpdateUserInput) -> DomainResult<User> {
-        let user = self.user_repo.update(user_id, input).await?;
+    pub async fn update(
+        &self,
+        auth_user: AuthorizedUser,
+        input: UpdateUserInput,
+    ) -> DomainResult<User> {
+        let user = self.user_repo.update(auth_user.0.id, input).await?;
         Ok(user)
     }
 }

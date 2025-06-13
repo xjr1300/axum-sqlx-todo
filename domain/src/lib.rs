@@ -182,6 +182,44 @@ mod tests {
     use super::*;
 
     #[rstest::rstest]
+    #[case(" leading space", true)]
+    #[case("trailing space ", true)]
+    #[case(" both sides ", true)]
+    #[case("no spaces", false)]
+    #[case("", false)]
+    #[case("   ", true)]
+    fn starts_or_ends_with_whitespace_ok(#[case] target: &str, #[case] expected: bool) {
+        assert_eq!(starts_or_ends_with_whitespace(target), expected);
+    }
+
+    #[rstest::rstest]
+    #[case(NumericOperator::Eq, "=")]
+    #[case(NumericOperator::Ne, "<>")]
+    #[case(NumericOperator::Gt, ">")]
+    #[case(NumericOperator::Gte, ">=")]
+    #[case(NumericOperator::Lt, "<")]
+    #[case(NumericOperator::Lte, "<=")]
+    #[case(NumericOperator::Between, "BETWEEN")]
+    #[case(NumericOperator::NotBetween, "NOT BETWEEN")]
+    fn numeric_operator_sql_ok(#[case] op: NumericOperator, #[case] expected: &str) {
+        assert_eq!(op.sql(), expected);
+    }
+
+    #[rstest::rstest]
+    #[case("eq", NumericOperator::Eq)]
+    #[case("ne", NumericOperator::Ne)]
+    #[case("gt", NumericOperator::Gt)]
+    #[case("gte", NumericOperator::Gte)]
+    #[case("lt", NumericOperator::Lt)]
+    #[case("lte", NumericOperator::Lte)]
+    #[case("between", NumericOperator::Between)]
+    #[case("not_between", NumericOperator::NotBetween)]
+    fn numeric_operator_from_str_ok(#[case] op: &str, #[case] expected: NumericOperator) {
+        let actual = NumericOperator::from_str(op).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest::rstest]
     #[case(NumericOperator::Eq, date!(2025 - 01 - 01), None, "col", "col = '2025-01-01'")]
     #[case(NumericOperator::Ne, date!(2025 - 01 - 01), None, "col", "col <> '2025-01-01'")]
     #[case(NumericOperator::Gt, date!(2025 - 01 - 01), None, "col", "col > '2025-01-01'")]
@@ -190,7 +228,7 @@ mod tests {
     #[case(NumericOperator::Lte, date!(2025- 01 - 01), None, "col", "col <= '2025-01-01'")]
     #[case(NumericOperator::Between, date!(2025 - 01 - 01), Some(date!(2025 - 01 - 01)), "col", "col BETWEEN '2025-01-01' AND '2025-01-01'")]
     #[case(NumericOperator::NotBetween, date!(2025 - 01 - 01), Some(date!(2025 - 01 - 31)), "col", "col NOT BETWEEN '2025-01-01' AND '2025-01-31'")]
-    fn date_filter_ok(
+    fn date_filter_new_ok(
         #[case] op: NumericOperator,
         #[case] from: Date,
         #[case] to: Option<Date>,
@@ -207,7 +245,7 @@ mod tests {
     #[case(NumericOperator::Between, date!(2025 - 01 - 01), None, NUMERIC_FILTER_MISSING_TO)]
     #[case(NumericOperator::NotBetween, date!(2025 - 01 - 01), None, NUMERIC_FILTER_MISSING_TO)]
     #[case(NumericOperator::Between, date!(2025 - 01 - 01), Some(date!(2024 - 12 - 31)), NUMERIC_FILTER_TO_LESS_THAN_FROM)]
-    fn date_filter_err(
+    fn date_filter_new_err(
         #[case] op: NumericOperator,
         #[case] from: Date,
         #[case] to: Option<Date>,

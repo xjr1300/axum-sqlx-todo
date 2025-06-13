@@ -77,3 +77,59 @@ where
     let values: Option<Wrapper<T>> = Option::deserialize(deserializer)?;
     Ok(values.map(|Wrapper(values)| values))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Serialize;
+    use time::macros::datetime;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    struct OptionOffsetDateTime {
+        #[serde(serialize_with = "serialize_option_offset_datetime")]
+        #[serde(deserialize_with = "deserialize_option_offset_datetime")]
+        value: Option<OffsetDateTime>,
+    }
+
+    #[rstest::rstest]
+    #[case(Some(datetime!(2025-10-01 12:00:00 +9)), "{\"value\":\"2025-10-01T12:00:00+09:00\"}")]
+    #[case(None, "{\"value\":null}")]
+    fn serialize_and_deserialize_option_offset_datetime_ok(
+        #[case] dt: Option<OffsetDateTime>,
+        #[case] serialized: &str,
+    ) {
+        let value = OptionOffsetDateTime { value: dt };
+        let actual_ser = serde_json::to_string(&value).unwrap();
+        assert_eq!(actual_ser, serialized);
+        let actual_de = serde_json::from_str::<OptionOffsetDateTime>(serialized).unwrap();
+        assert_eq!(actual_de, value);
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct SecretStringWrapper {
+        #[serde(serialize_with = "serialize_secret_string")]
+        #[serde(deserialize_with = "deserialize_secret_string")]
+        value: SecretString,
+    }
+
+    impl PartialEq for SecretStringWrapper {
+        fn eq(&self, other: &Self) -> bool {
+            self.value.expose_secret() == other.value.expose_secret()
+        }
+    }
+
+    impl Eq for SecretStringWrapper {}
+
+    #[rstest::rstest]
+    #[case(SecretString::new("secret_value".into()), "{\"value\":\"secret_value\"}")]
+    fn serialize_and_deserialize_secret_string_ok(
+        #[case] value: SecretString,
+        #[case] serialized: &str,
+    ) {
+        let value = SecretStringWrapper { value };
+        let actual_ser = serde_json::to_string(&value).unwrap();
+        assert_eq!(actual_ser, serialized);
+        let actual_de = serde_json::from_str::<SecretStringWrapper>(serialized).unwrap();
+        assert_eq!(actual_de, value);
+    }
+}

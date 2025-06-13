@@ -224,13 +224,11 @@ impl TestCase {
     }
 
     pub async fn todo_list(&self, body: Option<TodoListQueryParams>) -> reqwest::Response {
-        println!("body statuses: {:?}", body);
         let uri = format!("{}/todos", self.origin());
         match body {
             Some(body) => {
                 let params = body.to_string();
                 let uri = format!("{}?{}", uri, params);
-                println!("uri: {}", uri);
                 self.http_client.get(&uri).send().await.unwrap()
             }
             None => self.http_client.get(&uri).send().await.unwrap(),

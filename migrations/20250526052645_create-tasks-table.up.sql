@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS login_failed_histories (
 );
 
 -- table: todo_statuses
+-- If you need to change the records, you must fix todo status constants.
 CREATE TABLE IF NOT EXISTS todo_statuses (
     code SMALLINT NOT NULL,
     name VARCHAR(50) NOT NULL,

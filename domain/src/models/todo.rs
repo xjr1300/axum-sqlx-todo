@@ -7,7 +7,7 @@ use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_d
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
 use crate::{
-    DomainError, DomainErrorKind, DomainResult, impl_int_primitive, impl_string_primitive,
+    DomainErrorKind, DomainResult, domain_error, impl_int_primitive, impl_string_primitive,
 };
 
 /// Todo ID
@@ -34,13 +34,6 @@ pub struct TodoStatusName(#[garde(length(chars, min = 1, max = 50))] pub String)
 impl_string_primitive!(TodoStatusName);
 
 /// Todo
-///
-/// # ドメインルール
-///
-/// - 作成日時は更新日時と同じか、更新日時よりも前でなくてはならない。
-/// - 完了したTodoは更新できない。
-///   - したがって、完了時に更新日時を更新するため、完了日時は更新日時と同でなくてはならない。
-/// - アーカイブされたTodoは、更新できない。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Todo {
     /// ID
@@ -100,37 +93,58 @@ impl Todo {
         Ok(todo)
     }
 
+    /// # ドメインルール
+    ///
+    /// - 作成日時は更新日時と同じか、更新日時よりも前でなくてはならない。
+    /// - 完了予定日は、作成日時よりも後でなくてはならない。
+    /// - 完了している（完了日時が登録されている）場合、状態が完了でなければならない。
+    /// - 完了している（完了日時が登録されている）場合、完了日時は作成日時よりも後でなければならない。
+    /// - 完了している（完了日時が登録されている）場合、完了日時と更新日時が一致しなければならない。
+    ///   - 完了後は、更新できないため。
+    /// - 完了したTodoは更新できない。
+    /// - アーカイブされたTodoは、更新できない。
     fn validate(&self) -> DomainResult<()> {
         // 作成日時は更新日時と同じか、更新日時よりも前でなくてはならない。
         if self.created_at > self.updated_at {
-            return Err(DomainError {
-                kind: DomainErrorKind::Validation,
-                messages: vec!["created_at must be less than or equal to updated_at".into()],
-                source: anyhow::anyhow!("created_at must be less than or equal to updated_at"),
-            });
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "created_at must be less than or equal to updated_at",
+            ));
         }
 
-        // Todoが完了している場合
-        if let Some(completed_at) = self.completed_at {
-            // 完了日時は作成日時と同じか、作成日時よりも後でなくてはならない。
-            if completed_at < self.created_at {
-                return Err(DomainError {
-                    kind: DomainErrorKind::Validation,
-                    messages: vec![
-                        "completed_at must be greater than or equal to created_at".into(),
-                    ],
-                    source: anyhow::anyhow!(
-                        "completed_at must be greater than or equal to created_at"
-                    ),
-                });
+        // 完了予定日が登録されている場合
+        if let Some(due_date) = self.due_date {
+            // 完了予定日は作成日時よりも後でなくてはならない。
+            if due_date < self.created_at.date() {
+                return Err(domain_error(
+                    DomainErrorKind::Validation,
+                    "due_date must be greater than created_at",
+                ));
             }
-            // 完了日時は更新日時と等しくなくてはならない。
+        }
+
+        // 完了している（完了日時地が登録されている）場合
+        if let Some(completed_at) = self.completed_at {
+            // 状態が完了でなければならない。
+            if self.status.code != TODO_STATUS_CODE_COMPLETED {
+                return Err(domain_error(
+                    DomainErrorKind::Validation,
+                    "status must be completed when completed_at is set",
+                ));
+            }
+            // 完了日時は作成日時よりも後でなくてはならない。
+            if completed_at < self.created_at {
+                return Err(domain_error(
+                    DomainErrorKind::Validation,
+                    "completed_at must be greater than or equal to created_at",
+                ));
+            }
+            // 完了日時と更新日時が一致しなくてはならない。
             if completed_at != self.updated_at {
-                return Err(DomainError {
-                    kind: DomainErrorKind::Validation,
-                    messages: vec!["completed_at must be equal to updated_at".into()],
-                    source: anyhow::anyhow!("completed_at must be equal to updated_at"),
-                });
+                return Err(domain_error(
+                    DomainErrorKind::Validation,
+                    "completed_at must be equal to updated_at",
+                ));
             }
         }
 
@@ -156,6 +170,13 @@ pub struct TodoStatus {
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
+
+/// Todo状態コード
+pub const TODO_STATUS_CODE_NOT_STARTED: i16 = 1; // 未着手
+pub const TODO_STATUS_CODE_IN_PROGRESS: i16 = 2; // 進行中
+pub const TODO_STATUS_CODE_COMPLETED: i16 = 3; // 完了
+pub const TODO_STATUS_CODE_CANCELLED: i16 = 4; // キャンセル
+pub const TODO_STATUS_CODE_ON_HOLD: i16 = 5; // 保留
 
 #[cfg(test)]
 mod tests {

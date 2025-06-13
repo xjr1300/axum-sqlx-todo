@@ -74,6 +74,6 @@ where
         T: FromStr,
         <T as FromStr>::Err: Display;
 
-    let value: Option<Wrapper<T>> = Option::deserialize(deserializer)?;
-    Ok(value.map(|Wrapper(dt)| dt))
+    let values: Option<Wrapper<T>> = Option::deserialize(deserializer)?;
+    Ok(values.map(|Wrapper(values)| values))
 }

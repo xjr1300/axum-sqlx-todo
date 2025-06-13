@@ -1,7 +1,7 @@
 pub mod models;
 pub mod repositories;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, str::FromStr};
 
 use enum_display::EnumDisplay;
 use serde::Deserialize;
@@ -92,6 +92,24 @@ impl NumericOperator {
             NumericOperator::Lte => "<=",
             NumericOperator::Between => "BETWEEN",
             NumericOperator::NotBetween => "NOT BETWEEN",
+        }
+    }
+}
+
+impl FromStr for NumericOperator {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "eq" => Ok(NumericOperator::Eq),
+            "ne" => Ok(NumericOperator::Ne),
+            "gt" => Ok(NumericOperator::Gt),
+            "gte" => Ok(NumericOperator::Gte),
+            "lt" => Ok(NumericOperator::Lt),
+            "lte" => Ok(NumericOperator::Lte),
+            "between" => Ok(NumericOperator::Between),
+            "not_between" => Ok(NumericOperator::NotBetween),
+            _ => Err(format!("Unknown numeric operator: {}", s)),
         }
     }
 }

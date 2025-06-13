@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 
 use garde::Validate as _;
 use secrecy::{ExposeSecret, SecretString};
@@ -18,19 +17,6 @@ use crate::{
 
 /// ユーザーID
 pub type UserId = Id<User>;
-
-impl Copy for UserId {}
-impl PartialEq for UserId {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-impl Eq for UserId {}
-impl Hash for UserId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
 
 /// ユーザーの苗字
 #[derive(Debug, Clone, garde::Validate)]
@@ -221,7 +207,7 @@ pub struct LoginFailedHistory {
 }
 
 /// ロールコード
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, garde::Validate)]
+#[derive(Debug, Clone, garde::Validate)]
 pub struct RoleCode(#[garde(range(min = 1, max=i16::MAX))] pub i16);
 impl_int_primitive!(RoleCode, i16);
 

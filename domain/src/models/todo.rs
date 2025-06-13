@@ -24,7 +24,7 @@ pub struct TodoDescription(#[garde(length(chars, min = 1, max = 400))] pub Strin
 impl_string_primitive!(TodoDescription);
 
 /// Todo状態コード
-#[derive(Debug, Clone, PartialEq, Eq, Hash, garde::Validate)]
+#[derive(Debug, Clone, garde::Validate)]
 pub struct TodoStatusCode(#[garde(range(min=1, max=i16::MAX))] pub i16);
 impl_int_primitive!(TodoStatusCode, i16);
 

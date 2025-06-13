@@ -115,6 +115,7 @@ impl FromStr for NumericOperator {
 }
 
 /// 数値フィルター
+#[derive(Debug, Clone, Copy)]
 pub struct NumericFilter<T>
 where
     T: std::fmt::Display + PartialOrd,

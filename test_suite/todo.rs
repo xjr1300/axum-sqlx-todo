@@ -230,3 +230,68 @@ async fn anonymous_user_can_not_access_the_todo_list_endpoint() {
 
     test_case.end().await;
 }
+
+#[tokio::test]
+#[ignore]
+async fn get_todo_by_id_integration_test() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let valid_todo_id = "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175";
+    // If the user specifies the ID of a todo that belongs to them, they can get the todo.
+    let response = test_case.todo_get_by_id(valid_todo_id).await;
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::OK,
+        "{}",
+        response.text().await.unwrap()
+    );
+
+    // If the ID of a todo is not invalid format, the user gets an error.
+    let response = test_case.todo_get_by_id("invalid-todo-id").await;
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "{}",
+        response.text().await.unwrap()
+    );
+
+    // If the todo with the user's specified ID belongs to another user, the user gets an error.
+    let response = test_case
+        .todo_get_by_id("653acf81-a2e6-43cb-b4b4-9cdb822c740e")
+        .await;
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "{}",
+        response.text().await.unwrap()
+    );
+
+    // If the user specifies the ID of a todo that does not exist, they get an error.
+    let todo_id = Uuid::new_v4().to_string();
+    let response = test_case.todo_get_by_id(&todo_id).await;
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "{}",
+        response.text().await.unwrap()
+    );
+
+    // If an anonymous user tries to get a todo, they get an error.
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let uri = format!("{}/todos/{}", test_case.origin(), valid_todo_id);
+    let response = client.get(&uri).send().await.unwrap();
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::UNAUTHORIZED,
+        "{}",
+        response.text().await.unwrap()
+    );
+
+    test_case.end().await;
+}

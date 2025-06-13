@@ -236,6 +236,11 @@ impl TestCase {
             None => self.http_client.get(&uri).send().await.unwrap(),
         }
     }
+
+    pub async fn todo_get_by_id(&self, id: &str) -> reqwest::Response {
+        let uri = format!("{}/todos/{}", self.origin(), id);
+        self.http_client.get(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

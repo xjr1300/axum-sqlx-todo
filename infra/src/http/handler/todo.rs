@@ -1,22 +1,22 @@
 use axum::{
     Extension, Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
 };
 use serde::Deserialize;
 use time::Date;
+use uuid::Uuid;
 
 use domain::{
     NumericOperator,
-    models::{Todo, TodoStatusCode},
+    models::{Todo, TodoId, TodoStatusCode},
     repositories::TodoListInput,
 };
-use use_case::{AuthorizedUser, todo::TodoUseCase};
+use use_case::AuthorizedUser;
 use utils::{serde::deserialize_option_split_comma, time::DATE_FORMAT};
 
 use crate::{
     AppState,
-    http::{ApiError, ApiResult},
-    postgres::repositories::PgTodoRepository,
+    http::{ApiError, ApiResult, handler::todo_use_case, not_found},
 };
 
 #[tracing::instrument(skip(app_state))]
@@ -46,10 +46,26 @@ pub async fn list(
     };
     let input =
         TodoListInput::new(user.0.id, keyword, op, from, to, statuses).map_err(ApiError::from)?;
-    let todo_repo = PgTodoRepository::new(app_state.pg_pool.clone());
-    let use_case = TodoUseCase::new(todo_repo);
+    let use_case = todo_use_case(&app_state);
     let todos = use_case.list(input).await.map_err(ApiError::from)?;
     Ok(Json(todos))
+}
+
+pub async fn by_id(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+    todo_id: Path<Uuid>,
+) -> ApiResult<Json<Todo>> {
+    let todo_id = TodoId::from(todo_id.0);
+    let use_case = todo_use_case(&app_state);
+    let todo = use_case
+        .by_id(auth_user, todo_id)
+        .await
+        .map_err(ApiError::from)?;
+    match todo {
+        Some(todo) => Ok(Json(todo)),
+        None => Err(not_found("todo")),
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

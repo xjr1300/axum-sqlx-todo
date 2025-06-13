@@ -58,6 +58,13 @@ pub fn bad_request(message: Cow<'static, str>) -> ApiError {
     }
 }
 
+pub fn not_found(name: &str) -> ApiError {
+    ApiError {
+        status_code: StatusCode::NOT_FOUND,
+        messages: vec![format!("{} not found", name).into()],
+    }
+}
+
 const LOGIN_FAILED_MESSAGE: &str = "Login failed. Please check your email and password";
 
 pub fn login_failed() -> ApiError {

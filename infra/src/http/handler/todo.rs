@@ -1,5 +1,7 @@
-use axum::extract::Query;
-use axum::{Extension, Json, extract::State};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+};
 use serde::Deserialize;
 use time::Date;
 
@@ -62,7 +64,7 @@ pub struct TodoListQueryParams {
     /// 完了予定日の終了日
     pub to: Option<Date>,
     /// タスクのステータス
-    #[serde(deserialize_with = "deserialize_option_split_comma")]
+    #[serde(default, deserialize_with = "deserialize_option_split_comma")]
     pub statuses: Option<Vec<i16>>,
 }
 

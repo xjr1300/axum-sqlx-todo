@@ -1,7 +1,7 @@
 use domain::{
     DomainErrorKind, DomainResult, domain_error,
     models::{Todo, TodoId},
-    repositories::{TodoListInput, TodoRepository},
+    repositories::{TodoCreateInput, TodoListInput, TodoRepository},
 };
 
 use crate::AuthorizedUser;
@@ -21,11 +21,12 @@ where
         Self { todo_repo }
     }
 
+    /// ユーザーのTodoリストを返す。
     pub async fn list(&self, input: TodoListInput) -> DomainResult<Vec<Todo>> {
         self.todo_repo.list(input).await
     }
 
-    /// TodoのIDを指定して、Todoを取得する。
+    /// IDからTodoを取得する。
     ///
     /// 認証されたユーザーが所有するTodoのみを返し、所有していない場合はエラーを返す。
     pub async fn by_id(&self, auth_user: AuthorizedUser, id: TodoId) -> DomainResult<Option<Todo>> {
@@ -42,5 +43,14 @@ where
             }
             None => Ok(None),
         }
+    }
+
+    /// Todoを新規作成する。
+    pub async fn create(
+        &self,
+        auth_user: AuthorizedUser,
+        input: TodoCreateInput,
+    ) -> DomainResult<Todo> {
+        self.todo_repo.create(auth_user.0.id, input).await
     }
 }

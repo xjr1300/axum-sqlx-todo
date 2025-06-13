@@ -1,15 +1,17 @@
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use time::Date;
 use uuid::Uuid;
 
 use domain::{
     NumericOperator,
-    models::{Todo, TodoId, TodoStatusCode},
-    repositories::TodoListInput,
+    models::{Todo, TodoDescription, TodoId, TodoStatusCode, TodoTitle},
+    repositories::{TodoCreateInput, TodoListInput},
 };
 use use_case::AuthorizedUser;
 use utils::{serde::deserialize_option_split_comma, time::DATE_FORMAT};
@@ -68,6 +70,20 @@ pub async fn by_id(
     }
 }
 
+pub async fn create(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+    Json(request_body): Json<TodoCreateRequestBody>,
+) -> ApiResult<impl IntoResponse> {
+    let input = TodoCreateInput::try_from(request_body)?;
+    let use_case = todo_use_case(&app_state);
+    let created_todo = use_case
+        .create(auth_user, input)
+        .await
+        .map_err(ApiError::from)?;
+    Ok((StatusCode::CREATED, Json(created_todo)))
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoListQueryParams {
@@ -110,5 +126,29 @@ impl std::fmt::Display for TodoListQueryParams {
             ));
         }
         write!(f, "{}", params.join("&"))
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoCreateRequestBody {
+    pub title: String,
+    pub description: Option<String>,
+    pub due_date: Option<Date>,
+}
+
+impl TryFrom<TodoCreateRequestBody> for TodoCreateInput {
+    type Error = ApiError;
+
+    fn try_from(value: TodoCreateRequestBody) -> Result<Self, Self::Error> {
+        Ok(TodoCreateInput {
+            title: TodoTitle::new(value.title).map_err(ApiError::from)?,
+            description: value
+                .description
+                .map(TodoDescription::new)
+                .transpose()
+                .map_err(ApiError::from)?,
+            due_date: value.due_date,
+        })
     }
 }

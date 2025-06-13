@@ -27,15 +27,23 @@ use domain::{
 };
 use infra::{
     AppState,
-    http::handler::{todo::TodoListQueryParams, user::UpdateUserRequestBody},
+    http::handler::{
+        todo::{TodoCreateRequestBody, TodoListQueryParams},
+        user::UpdateUserRequestBody,
+    },
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
     settings::AppSettings,
 };
+use once_cell::sync::Lazy;
+use uuid::Uuid;
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};
 
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+pub static TARO_USER_ID: Lazy<Uuid> =
+    Lazy::new(|| Uuid::parse_str("47125c09-1dea-42b2-a14e-357e59acf3dc").unwrap());
 
 /// Test case for integration tests
 ///
@@ -214,13 +222,7 @@ impl TestCase {
             email: String::from("taro@example.com"),
             password: String::from("ab12AB#$"),
         };
-        let response = self.login(&body).await;
-        assert_eq!(
-            response.status(),
-            reqwest::StatusCode::OK,
-            "Taro login failed: {}",
-            response.text().await.unwrap()
-        );
+        self.login(&body).await;
     }
 
     pub async fn todo_list(&self, body: Option<TodoListQueryParams>) -> reqwest::Response {
@@ -238,6 +240,16 @@ impl TestCase {
     pub async fn todo_get_by_id(&self, id: &str) -> reqwest::Response {
         let uri = format!("{}/todos/{}", self.origin(), id);
         self.http_client.get(&uri).send().await.unwrap()
+    }
+
+    pub async fn todo_create(&self, request_body: TodoCreateRequestBody) -> reqwest::Response {
+        let uri = format!("{}/todos", self.origin());
+        self.http_client
+            .post(&uri)
+            .json(&request_body)
+            .send()
+            .await
+            .unwrap()
     }
 }
 

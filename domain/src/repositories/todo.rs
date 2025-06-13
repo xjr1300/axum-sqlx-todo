@@ -15,7 +15,7 @@ pub trait TodoRepository {
     async fn by_id(&self, id: TodoId) -> DomainResult<Option<Todo>>;
 
     /// Todoを新規作成する。
-    async fn create(&self, todo: TodoCreateInput) -> DomainResult<Todo>;
+    async fn create(&self, user_id: UserId, input: TodoCreateInput) -> DomainResult<Todo>;
 
     /// Todoを更新する。
     async fn update(&self, id: TodoId, todo: TodoUpdateInput) -> DomainResult<Todo>;
@@ -78,8 +78,6 @@ impl TodoListInput {
 }
 
 pub struct TodoCreateInput {
-    /// ユーザーID
-    pub user_id: UserId,
     /// タイトル
     pub title: TodoTitle,
     /// 説明

@@ -1,12 +1,12 @@
 use time::macros::{date, datetime};
 use uuid::Uuid;
 
-use domain::models::Todo;
-use infra::http::handler::todo::TodoListQueryParams;
+use domain::models::{TODO_STATUS_CODE_NOT_STARTED, Todo};
+use infra::http::handler::todo::{TodoCreateRequestBody, TodoListQueryParams};
 
 use crate::{
     helpers::{ResponseParts, load_app_settings_for_testing, split_response},
-    test_case::{EnableTracing, InsertTestData, REQUEST_TIMEOUT, TestCase},
+    test_case::{EnableTracing, InsertTestData, REQUEST_TIMEOUT, TARO_USER_ID, TestCase},
 };
 
 /// Check that the user can get their own todo list.
@@ -292,6 +292,83 @@ async fn get_todo_by_id_integration_test() {
         "{}",
         response.text().await.unwrap()
     );
+
+    test_case.end().await;
+}
+
+/// Check that the user can create a todo with a due date.
+#[tokio::test]
+#[ignore]
+async fn create_todo_with_due_date() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let request_body = TodoCreateRequestBody {
+        title: String::from("Rustの学習"),
+        description: Some(String::from("Rustの非同期処理を学ぶ")),
+        due_date: Some(date!(2025 - 06 - 20)),
+    };
+    let response = test_case.todo_create(request_body.clone()).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, reqwest::StatusCode::CREATED, "{}", body);
+    let todo = serde_json::from_str::<Todo>(&body).unwrap();
+    assert_eq!(todo.user.id, *TARO_USER_ID);
+    assert_eq!(todo.title, request_body.title.as_str());
+    assert_eq!(
+        *todo.description.as_ref().unwrap(),
+        request_body.description.as_ref().unwrap().as_str()
+    );
+    assert_eq!(todo.status.code, TODO_STATUS_CODE_NOT_STARTED);
+    assert_eq!(todo.due_date, Some(date!(2025 - 06 - 20)));
+    assert_eq!(todo.completed_at, None);
+
+    test_case.end().await;
+}
+
+// Check that the user can create a todo without a due date.
+#[tokio::test]
+#[ignore]
+async fn create_todo_without_due_date() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let request_body = TodoCreateRequestBody {
+        title: String::from("Rustの学習"),
+        ..Default::default()
+    };
+    let response = test_case.todo_create(request_body.clone()).await;
+    let ResponseParts { body, .. } = split_response(response).await;
+    let todo = serde_json::from_str::<Todo>(&body).unwrap();
+    assert!(todo.description.is_none());
+    assert!(todo.due_date.is_none());
+
+    test_case.end().await;
+}
+
+/// Check that the anonymous user can not access the endpoint to create a todo.
+#[tokio::test]
+#[ignore]
+async fn anonymous_user_can_not_access_the_create_todo_endpoint() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
+
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let request_body = TodoCreateRequestBody {
+        title: String::from("Rustの学習"),
+        description: Some(String::from("Rustの非同期処理を学ぶ")),
+        due_date: Some(date!(2025 - 06 - 20)),
+    };
+    let uri = format!("{}/todos", test_case.origin());
+    let response = client.post(&uri).json(&request_body).send().await.unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     test_case.end().await;
 }

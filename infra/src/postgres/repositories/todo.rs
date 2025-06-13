@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use domain::{
     DomainError, DomainErrorKind, DomainResult,
-    models::{Role, Todo, TodoId, TodoStatus, User, primitives::DisplayOrder},
+    models::{Role, Todo, TodoId, TodoStatus, User, UserId, primitives::DisplayOrder},
     repositories::{TodoCreateInput, TodoListInput, TodoRepository, TodoUpdateInput},
 };
 
@@ -76,7 +76,7 @@ impl TodoRepository for PgTodoRepository {
     }
 
     // Todoを新規作成する。
-    async fn create(&self, todo: TodoCreateInput) -> DomainResult<Todo> {
+    async fn create(&self, user_id: UserId, input: TodoCreateInput) -> DomainResult<Todo> {
         let mut tx = self.begin().await?;
         let row = sqlx::query_as!(
             TodoRow,
@@ -104,10 +104,10 @@ impl TodoRepository for PgTodoRepository {
             INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
-            todo.user_id.0,
-            todo.title.0,
-            todo.description.map(|d| d.0),
-            todo.due_date,
+            user_id.0,
+            input.title.0,
+            input.description.map(|d| d.0),
+            input.due_date,
             None::<OffsetDateTime> // completed_at is None for new todos
         )
         .fetch_one(&mut *tx)

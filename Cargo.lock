@@ -2738,6 +2738,7 @@ dependencies = [
  "domain",
  "infra",
  "log",
+ "once_cell",
  "reqwest",
  "secrecy",
  "serde",

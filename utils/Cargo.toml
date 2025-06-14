@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rstest.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 time.workspace = true
 
 [dev-dependencies]
+rstest.workspace = true
 secrecy.workspace = true
 serde_json.workspace = true

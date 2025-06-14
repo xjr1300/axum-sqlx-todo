@@ -11,20 +11,14 @@ use domain::{
     repositories::{TokenType, generate_auth_token_info_key},
 };
 use infra::{
-    http::{
-        COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY,
-        handler::user::{RefreshTokensRequestBody, UpdateUserRequestBody},
-    },
+    http::{COOKIE_ACCESS_TOKEN_KEY, COOKIE_REFRESH_TOKEN_KEY},
     jwt::{Claim, generate_token},
     settings::HttpProtocol,
 };
 
 use crate::{
     helpers::{ResponseParts, load_app_settings_for_testing, split_response},
-    test_case::{
-        EnableTracing, InsertTestData, REQUEST_TIMEOUT, RawLoginRequestBody, RawLoginResponseBody,
-        RawSignUpRequestBody, TestCase,
-    },
+    test_case::{EnableTracing, InsertTestData, REQUEST_TIMEOUT, RawLoginResponseBody, TestCase},
 };
 
 /// Check that a user can register, log in, retrieve their information, and log out successfully.
@@ -37,11 +31,11 @@ async fn user_integration_test() {
     // Register a new user
     let sign_up_requested_at = OffsetDateTime::now_utc();
     let sign_up_request_body = create_sign_up_request_body();
-    let response = test_case.sign_up(&sign_up_request_body).await;
+    let response = test_case.sign_up(sign_up_request_body).await;
     let user: User = response.json().await.unwrap();
-    assert_eq!(user.family_name.0, sign_up_request_body.family_name);
-    assert_eq!(user.given_name.0, sign_up_request_body.given_name);
-    assert_eq!(user.email.0, sign_up_request_body.email);
+    assert_eq!(user.family_name.0, "Doe");
+    assert_eq!(user.given_name.0, "John");
+    assert_eq!(user.email.0, "john@example.com");
     assert_eq!(user.role.code, RoleCode::User);
     assert!(user.active);
     assert!(user.last_login_at.is_none());
@@ -51,8 +45,7 @@ async fn user_integration_test() {
 
     // Log in with the new user
     let login_requested_at = OffsetDateTime::now_utc();
-    let request_body: RawLoginRequestBody = sign_up_request_body.clone().into();
-    let response = test_case.login(&request_body).await;
+    let response = test_case.login(john_credentials()).await;
     let ResponseParts {
         status_code,
         headers,
@@ -144,9 +137,9 @@ async fn user_integration_test() {
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK);
     let user: User = serde_json::from_str(&body).unwrap();
-    assert_eq!(user.family_name.0, sign_up_request_body.family_name);
-    assert_eq!(user.given_name.0, sign_up_request_body.given_name);
-    assert_eq!(user.email.0, sign_up_request_body.email);
+    assert_eq!(user.family_name.0, "Doe");
+    assert_eq!(user.given_name.0, "John");
+    assert_eq!(user.email.0, "john@example.com");
     assert!(user.active);
     assert!((user.last_login_at.unwrap() - login_requested_at).abs() < REQUEST_TIMEOUT);
     assert!((login_requested_at - user.created_at).abs() < REQUEST_TIMEOUT);
@@ -211,16 +204,18 @@ async fn user_integration_test() {
 async fn user_can_not_login_with_invalid_credentials() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
-
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let request_body: RawLoginRequestBody = sign_up_body.clone().into();
+    let (user, ..) = create_user_and_login(&test_case).await;
 
     // Login with an wrong email address
-    let wrong_email = RawLoginRequestBody {
-        email: String::from("wrong@example.com"),
-        ..request_body.clone()
-    };
-    let response = test_case.login(&wrong_email).await;
+    let request_body = String::from(
+        r#"
+        {
+            "email": "wrong@example.com",
+            "password": "ab12$%AB"
+        }
+        "#,
+    );
+    let response = test_case.login(request_body).await;
     let history = test_case.get_login_failed_history(user.id).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     // No login failed history should be recorded if the email address is incorrect
@@ -228,11 +223,7 @@ async fn user_can_not_login_with_invalid_credentials() {
 
     // Login with an wrong password
     let attempted_at = OffsetDateTime::now_utc();
-    let wrong_password = RawLoginRequestBody {
-        password: String::from("Wr0ng_password"),
-        ..request_body.clone()
-    };
-    let response = test_case.login(&wrong_password).await;
+    let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     // A login failed history should be recorded if the email address is correct but the password is incorrect
@@ -249,11 +240,10 @@ async fn user_can_not_login_when_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
+    let (user, ..) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;
 
-    let request_body: RawLoginRequestBody = sign_up_body.into();
-    let response = test_case.login(&request_body).await;
+    let response = test_case.login(john_credentials()).await;
     assert_eq!(response.status(), StatusCode::LOCKED);
 
     test_case.end().await;
@@ -266,16 +256,10 @@ async fn user_is_not_locked_after_user_attempts_to_login_in_max_attempt_times() 
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let correct_credential: RawLoginRequestBody = sign_up_body.into();
-    let incorrect_credential = RawLoginRequestBody {
-        email: correct_credential.email.clone(),
-        password: String::from("ab13$%AB"),
-    };
-
+    let (user, ..) = create_user_and_login(&test_case).await;
     // Attempt to log in with an incorrect password multiple times
     for times in 0..test_case.app_state.app_settings.login.max_attempts {
-        let response = test_case.login(&incorrect_credential).await;
+        let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(history.number_of_attempts, times + 1);
@@ -287,7 +271,7 @@ async fn user_is_not_locked_after_user_attempts_to_login_in_max_attempt_times() 
         "User should not be locked after max login attempts"
     );
     // The user log in successfully , if attempt to log in with the correct password
-    let response = test_case.login(&correct_credential).await;
+    let response = test_case.login(john_credentials()).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     test_case.end().await;
@@ -300,16 +284,10 @@ async fn user_is_locked_after_use_attempts_to_login_exceeding_max_attempts() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let correct_credential: RawLoginRequestBody = sign_up_body.into();
-    let incorrect_credential = RawLoginRequestBody {
-        email: correct_credential.email.clone(),
-        password: String::from("ab13$%AB"),
-    };
-
+    let (user, ..) = create_user_and_login(&test_case).await;
     // Attempt to log in with an incorrect password multiple times
     for times in 0..=test_case.app_state.app_settings.login.max_attempts {
-        let response = test_case.login(&incorrect_credential).await;
+        let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(history.number_of_attempts, times + 1);
@@ -321,7 +299,7 @@ async fn user_is_locked_after_use_attempts_to_login_exceeding_max_attempts() {
         "User should be locked after exceeding max login attempts"
     );
     // The user log in failed , if attempt to log in with the correct password
-    let response = test_case.login(&correct_credential).await;
+    let response = test_case.login(john_credentials()).await;
     assert_eq!(response.status(), StatusCode::LOCKED);
 
     test_case.end().await;
@@ -338,15 +316,9 @@ async fn user_can_login_after_user_attempts_to_login_in_max_attempt_times() {
     app_settings.login.attempts_seconds = 1;
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let correct_credential: RawLoginRequestBody = sign_up_body.into();
-    let incorrect_credential = RawLoginRequestBody {
-        email: correct_credential.email.clone(),
-        password: String::from("ab13$%AB"),
-    };
-
+    let (user, ..) = create_user_and_login(&test_case).await;
     // Attempt to log in with an incorrect password
-    let response = test_case.login(&incorrect_credential).await;
+    let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(history.number_of_attempts, 1);
@@ -354,7 +326,7 @@ async fn user_can_login_after_user_attempts_to_login_in_max_attempt_times() {
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // The user log in successful
-    let response = test_case.login(&correct_credential).await;
+    let response = test_case.login(john_credentials()).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     test_case.end().await;
@@ -369,16 +341,10 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
     app_settings.login.attempts_seconds = 2;
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let correct_credential: RawLoginRequestBody = sign_up_body.into();
-    let incorrect_credential = RawLoginRequestBody {
-        email: correct_credential.email.clone(),
-        password: String::from("ab13$%AB"),
-    };
-
+    let (user, ..) = create_user_and_login(&test_case).await;
     // Attempt to log in with an incorrect password
     for times in 0..test_case.app_state.app_settings.login.max_attempts {
-        let response = test_case.login(&incorrect_credential).await;
+        let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(history.number_of_attempts, times + 1);
@@ -388,7 +354,7 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
 
     // The user log in failed
     let requested_at = OffsetDateTime::now_utc();
-    let response = test_case.login(&incorrect_credential).await;
+    let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let duration = history.attempted_at - requested_at;
@@ -405,7 +371,7 @@ async fn user_can_not_get_user_information_when_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (_, user, ..) = create_user_and_login(&test_case).await;
+    let (user, ..) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;
 
     let response = test_case.me().await;
@@ -440,94 +406,74 @@ async fn user_can_update_user_information_with_credentials() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (sign_up_body, user, ..) = create_user_and_login(&test_case).await;
-    let request_body: RawLoginRequestBody = sign_up_body.clone().into();
-    let _ = test_case.login(&request_body).await;
+    let (user, ..) = create_user_and_login(&test_case).await;
+    let _ = test_case.login(john_credentials()).await;
 
     // Update user information
     let requested_at = OffsetDateTime::now_utc();
-    let request_body = UpdateUserRequestBody {
-        family_name: Some(String::from("Smith")),
-        given_name: Some(String::from("Jane")),
-        email: Some(String::from("jane@example.com")),
-    };
-    let response = test_case.update_user(&request_body).await;
+    let request_body = String::from(
+        r#"
+        {
+            "familyName": "Smith",
+            "givenName": "Jane",
+            "email": "jane@example.com"
+
+        }
+        "#,
+    );
+    let response = test_case.update_user(request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK);
     let updated_user: User = serde_json::from_str(&body).unwrap();
     assert_eq!(updated_user.id, user.id);
-    assert_eq!(
-        updated_user.family_name.0,
-        request_body.family_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.given_name.0,
-        request_body.given_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.email.0,
-        request_body.email.as_ref().unwrap().as_str()
-    );
+    assert_eq!(updated_user.family_name, "Smith");
+    assert_eq!(updated_user.given_name, "Jane",);
+    assert_eq!(updated_user.email, "jane@example.com");
     assert!((updated_user.updated_at - requested_at).abs() < REQUEST_TIMEOUT);
 
     // Update family name only
-    let family_name_only = UpdateUserRequestBody {
-        family_name: Some(String::from("Schmo")),
-        ..Default::default()
-    };
-    let response = test_case.update_user(&family_name_only).await;
+    let family_name_only = String::from(
+        r#"
+        {
+            "familyName": "Schmo"
+        }
+        "#,
+    );
+    let response = test_case.update_user(family_name_only).await;
     let updated_user: User = response.json().await.unwrap();
-    assert_eq!(
-        updated_user.family_name.0,
-        family_name_only.family_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(updated_user.given_name.0, request_body.given_name.unwrap());
-    assert_eq!(
-        updated_user.email.0,
-        request_body.email.as_ref().unwrap().as_str()
-    );
+    assert_eq!(updated_user.family_name, "Schmo");
+    assert_eq!(updated_user.given_name, "Jane");
+    assert_eq!(updated_user.email, "jane@example.com");
 
     // Update given name only
-    let given_name_only = UpdateUserRequestBody {
-        given_name: Some(String::from("Jane")),
-        ..Default::default()
-    };
-    let response = test_case.update_user(&given_name_only).await;
+    let given_name_only = String::from(
+        r#"
+        {
+            "givenName": "Alice"
+        }
+        "#,
+    );
+    let response = test_case.update_user(given_name_only).await;
     let updated_user: User = response.json().await.unwrap();
-    assert_eq!(
-        updated_user.family_name.0,
-        family_name_only.family_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.given_name.0,
-        given_name_only.given_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.email.0,
-        request_body.email.as_ref().unwrap().as_str()
-    );
+    assert_eq!(updated_user.family_name, "Schmo");
+    assert_eq!(updated_user.given_name, "Alice");
+    assert_eq!(updated_user.email, "jane@example.com");
 
     // Update email only
-    let email_only = UpdateUserRequestBody {
-        email: Some(String::from("jane@example.com")),
-        ..Default::default()
-    };
-    let response = test_case.update_user(&email_only).await;
+    let email_only = String::from(
+        r#"
+        {
+            "email": "alice@example.com"
+        }
+        "#,
+    );
+    let response = test_case.update_user(email_only).await;
     let updated_user: User = response.json().await.unwrap();
-    assert_eq!(
-        updated_user.family_name.0,
-        family_name_only.family_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.given_name.0,
-        given_name_only.given_name.as_ref().unwrap().as_str()
-    );
-    assert_eq!(
-        updated_user.email.0,
-        email_only.email.as_ref().unwrap().as_str()
-    );
+    assert_eq!(updated_user.family_name, "Schmo");
+    assert_eq!(updated_user.given_name, "Alice");
+    assert_eq!(updated_user.email, "alice@example.com");
 
     test_case.end().await;
 }
@@ -582,7 +528,7 @@ async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_body() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (_, _, tokens) = create_user_and_login(&test_case).await;
+    let (_, tokens) = create_user_and_login(&test_case).await;
 
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
@@ -590,13 +536,18 @@ async fn user_can_refresh_tokens_with_valid_refresh_token_in_the_body() {
         .build()
         .unwrap();
     let uri = format!("{}/users/refresh-tokens", test_case.origin());
-    let body = RefreshTokensRequestBody {
-        refresh_token: SecretString::new(tokens.refresh_token.into()),
-    };
+    let body = format!(
+        r#"
+        {{
+            "refreshToken": "{}"
+        }}
+        "#,
+        tokens.refresh_token
+    );
     let response = client
         .post(&uri)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&body)
+        .body(body)
         .send()
         .await
         .unwrap();
@@ -639,7 +590,7 @@ async fn user_can_not_refresh_tokens_invalid_refresh_token_in_the_cookie() {
     let test_case =
         TestCase::begin(app_settings.clone(), EnableTracing::No, InsertTestData::No).await;
 
-    let (_, user, _) = create_user_and_login(&test_case).await;
+    let (user, _) = create_user_and_login(&test_case).await;
     let claim = Claim {
         user_id: user.id,
         expiration: 3000,
@@ -732,7 +683,7 @@ async fn user_can_not_refresh_tokens_when_the_user_is_locked() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
-    let (_, user, _) = create_user_and_login(&test_case).await;
+    let (user, _) = create_user_and_login(&test_case).await;
     test_case.set_user_active_status(user.id, false).await;
     let response = test_case.refresh_tokens().await;
     assert_eq!(response.status(), StatusCode::LOCKED);
@@ -740,25 +691,48 @@ async fn user_can_not_refresh_tokens_when_the_user_is_locked() {
     test_case.end().await;
 }
 
-fn create_sign_up_request_body() -> RawSignUpRequestBody {
-    RawSignUpRequestBody {
-        family_name: String::from("Doe"),
-        given_name: String::from("John"),
-        email: String::from("john@example.com"),
-        password: String::from("ab12$%AB"),
-    }
+fn john_credentials() -> String {
+    String::from(
+        r#"
+        {
+            "email": "john@example.com",
+            "password": "ab12$%AB"
+        }
+        "#,
+    )
 }
 
-async fn create_user_and_login(
-    test_case: &TestCase,
-) -> (RawSignUpRequestBody, User, RawLoginResponseBody) {
-    let sign_up_body = create_sign_up_request_body();
-    let response = test_case.sign_up(&sign_up_body).await;
+fn john_incorrect_credential() -> String {
+    String::from(
+        r#"
+        {
+            "email": "john@example.com",
+            "password": "ab13$%AB"
+        }
+        "#,
+    )
+}
+
+fn create_sign_up_request_body() -> String {
+    String::from(
+        r#"
+        {
+            "familyName": "Doe",
+            "givenName": "John",
+            "email": "john@example.com",
+            "password": "ab12$%AB"
+        }
+        "#,
+    )
+}
+
+async fn create_user_and_login(test_case: &TestCase) -> (User, RawLoginResponseBody) {
+    let body = create_sign_up_request_body();
+    let response = test_case.sign_up(body).await;
     let user: User = response.json().await.unwrap();
-    let request_body: RawLoginRequestBody = sign_up_body.clone().into();
-    let response = test_case.login(&request_body).await;
-    let tokens = response.json::<RawLoginResponseBody>().await.unwrap();
-    (sign_up_body, user, tokens)
+    let response = test_case.login(john_credentials()).await;
+    let response_body = response.json::<RawLoginResponseBody>().await.unwrap();
+    (user, response_body)
 }
 
 /// Check that the cookie specification for access/refresh tokens is correct

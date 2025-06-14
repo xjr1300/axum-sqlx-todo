@@ -14,7 +14,6 @@
 //! So you must run the `bin/drop_test_dbs.sh` script to drop all the test databases.
 use std::{thread::JoinHandle, time::Duration};
 
-use axum::http::HeaderMap;
 use once_cell::sync::Lazy;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -29,11 +28,8 @@ use domain::{
     },
 };
 use infra::{
-    AppState,
-    http::handler::{todo::TodoListQueryParams, user::UpdateUserRequestBody},
-    postgres::repositories::PgUserRepository,
-    redis::token::RedisTokenRepository,
-    settings::AppSettings,
+    AppState, http::handler::todo::TodoListQueryParams, postgres::repositories::PgUserRepository,
+    redis::token::RedisTokenRepository, settings::AppSettings,
 };
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};
@@ -184,14 +180,26 @@ impl TestCase {
         tx.commit().await.unwrap();
     }
 
-    pub async fn sign_up(&self, body: &RawSignUpRequestBody) -> reqwest::Response {
+    pub async fn sign_up(&self, body: String) -> reqwest::Response {
         let uri = format!("{}/users/sign-up", self.origin());
-        self.http_client.post(&uri).json(body).send().await.unwrap()
+        self.http_client
+            .post(&uri)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+            .unwrap()
     }
 
-    pub async fn login(&self, body: &RawLoginRequestBody) -> reqwest::Response {
+    pub async fn login(&self, body: String) -> reqwest::Response {
         let uri = format!("{}/users/login", self.origin());
-        self.http_client.post(&uri).json(body).send().await.unwrap()
+        self.http_client
+            .post(&uri)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+            .unwrap()
     }
 
     pub async fn me(&self) -> reqwest::Response {
@@ -199,11 +207,12 @@ impl TestCase {
         self.http_client.get(&uri).send().await.unwrap()
     }
 
-    pub async fn update_user(&self, body: &UpdateUserRequestBody) -> reqwest::Response {
+    pub async fn update_user(&self, body: String) -> reqwest::Response {
         let uri = format!("{}/users/me", self.origin());
         self.http_client
             .patch(&uri)
-            .json(body)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
             .send()
             .await
             .unwrap()
@@ -224,7 +233,8 @@ impl TestCase {
             email: String::from("taro@example.com"),
             password: String::from("ab12AB#$"),
         };
-        self.login(&body).await;
+        let body = serde_json::to_string(&body).unwrap();
+        self.login(body).await;
     }
 
     pub async fn todo_list(&self, params: Option<TodoListQueryParams>) -> reqwest::Response {
@@ -245,12 +255,10 @@ impl TestCase {
     }
 
     pub async fn todo_create(&self, body: String) -> reqwest::Response {
-        let mut headers = HeaderMap::new();
-        headers.append("Content-Type", "application/json".parse().unwrap());
         let uri = format!("{}/todos", self.origin());
         self.http_client
             .post(&uri)
-            .headers(headers)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body)
             .send()
             .await
@@ -258,12 +266,10 @@ impl TestCase {
     }
 
     pub async fn todo_update(&self, todo_id: &str, body: String) -> reqwest::Response {
-        let mut headers = HeaderMap::new();
-        headers.append("Content-Type", "application/json".parse().unwrap());
         let uri = format!("{}/todos/{}", self.origin(), todo_id);
         self.http_client
             .patch(&uri)
-            .headers(headers)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body)
             .send()
             .await

@@ -39,7 +39,7 @@ pub async fn list(
         Some(
             statuses
                 .iter()
-                .map(|s| TodoStatusCode::new(*s))
+                .map(|s| TodoStatusCode::try_from(*s))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(ApiError::from)?,
         )

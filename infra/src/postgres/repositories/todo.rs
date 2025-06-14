@@ -154,7 +154,7 @@ impl TodoRepository for PgTodoRepository {
             "#,
             todo.title.0,
             todo.description.map(|d| d.0),
-            todo.todo_status_code.0,
+            todo.todo_status_code as i16,
             todo.due_date,
             todo.completed_at,
             todo.archived,
@@ -302,7 +302,7 @@ fn list_where_clause(input: &TodoListInput, todos_table: &str) -> String {
             todos_table,
             statuses
                 .iter()
-                .map(|s| s.0.to_string())
+                .map(|s| (*s as i16).to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         ));

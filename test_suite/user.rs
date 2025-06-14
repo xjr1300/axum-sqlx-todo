@@ -7,7 +7,7 @@ use sqlx::types::time::OffsetDateTime;
 use time::Duration;
 
 use domain::{
-    models::{USER_ROLE_CODE, User},
+    models::{RoleCode, User},
     repositories::{TokenType, generate_auth_token_info_key},
 };
 use infra::{
@@ -42,7 +42,7 @@ async fn user_integration_test() {
     assert_eq!(user.family_name.0, sign_up_request_body.family_name);
     assert_eq!(user.given_name.0, sign_up_request_body.given_name);
     assert_eq!(user.email.0, sign_up_request_body.email);
-    assert_eq!(user.role.code.0, USER_ROLE_CODE);
+    assert_eq!(user.role.code, RoleCode::User);
     assert!(user.active);
     assert!(user.last_login_at.is_none());
     assert!((user.created_at - sign_up_requested_at).abs() < REQUEST_TIMEOUT);

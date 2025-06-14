@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS roles (
     CONSTRAINT pk_roles PRIMARY KEY (code)
 );
 -- DO NOT CHANGE RECORDS BELOW
--- If you need to change the records, you must fix role code constants.
+-- If you need to change the code value, you must fix the RoleCode enum.
 INSERT INTO roles (code, name, description, display_order) VALUES
     (1, '管理者', 'システム全体の管理を行う役割', 1),
     (2, 'ユーザー', '通常のユーザーとしての役割', 2);
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS login_failed_histories (
 );
 
 -- table: todo_statuses
--- If you need to change the records, you must fix todo status constants.
+-- If you need to change the code value, you must fix the TodoStatusCode enum.
 CREATE TABLE IF NOT EXISTS todo_statuses (
     code SMALLINT NOT NULL,
     name VARCHAR(50) NOT NULL,

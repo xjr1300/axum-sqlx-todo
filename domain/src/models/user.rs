@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use garde::Validate as _;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use time::OffsetDateTime;
 
 use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_datetime};
 
 use super::primitives::Id;
 use crate::{
-    DomainError, DomainErrorKind, DomainResult, domain_error, impl_int_primitive,
-    impl_string_primitive,
+    DomainError, DomainErrorKind, DomainResult, domain_error, impl_string_primitive,
     models::primitives::{Description, DisplayOrder},
     starts_or_ends_with_whitespace,
 };
@@ -207,9 +207,27 @@ pub struct LoginFailedHistory {
 }
 
 /// ロールコード
-#[derive(Debug, Clone, garde::Validate)]
-pub struct RoleCode(#[garde(range(min = 1, max=i16::MAX))] pub i16);
-impl_int_primitive!(RoleCode, i16);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(i16)]
+pub enum RoleCode {
+    Admin = 1,
+    User = 2,
+}
+
+impl TryFrom<i16> for RoleCode {
+    type Error = DomainError;
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(RoleCode::Admin),
+            2 => Ok(RoleCode::User),
+            _ => Err(domain_error(
+                DomainErrorKind::Validation,
+                "Invalid role code",
+            )),
+        }
+    }
+}
 
 /// ロール名
 #[derive(Debug, Clone, garde::Validate)]
@@ -240,11 +258,6 @@ pub struct Role {
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
 }
-
-/// 管理者ロールコード
-pub const ADMIN_ROLE_CODE: i16 = 1;
-/// ユーザーロールコード
-pub const USER_ROLE_CODE: i16 = 2;
 
 #[cfg(test)]
 mod tests {

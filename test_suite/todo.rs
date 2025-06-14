@@ -1,7 +1,7 @@
 use time::macros::{date, datetime};
 use uuid::Uuid;
 
-use domain::models::{TODO_STATUS_CODE_NOT_STARTED, Todo};
+use domain::models::{Todo, TodoStatusCode};
 use infra::http::handler::todo::{TodoCreateRequestBody, TodoListQueryParams};
 
 use crate::{
@@ -38,7 +38,7 @@ async fn the_user_can_get_their_own_todo_list() {
         todo.description.as_ref().unwrap(),
         &"月次レポートを作成して提出"
     );
-    assert_eq!(todo.status.code, 1);
+    assert_eq!(todo.status.code, TodoStatusCode::NotStarted);
     assert_eq!(todo.due_date, Some(date!(2025 - 06 - 12)));
     assert_eq!(todo.completed_at, None);
     assert!(!todo.archived);
@@ -321,7 +321,7 @@ async fn create_todo_with_due_date() {
         *todo.description.as_ref().unwrap(),
         request_body.description.as_ref().unwrap().as_str()
     );
-    assert_eq!(todo.status.code, TODO_STATUS_CODE_NOT_STARTED);
+    assert_eq!(todo.status.code, TodoStatusCode::NotStarted);
     assert_eq!(todo.due_date, Some(date!(2025 - 06 - 20)));
     assert_eq!(todo.completed_at, None);
 

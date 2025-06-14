@@ -1,14 +1,13 @@
 use garde::Validate as _;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use time::{Date, OffsetDateTime};
 
 use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_datetime};
 
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
-use crate::{
-    DomainErrorKind, DomainResult, domain_error, impl_int_primitive, impl_string_primitive,
-};
+use crate::{DomainError, DomainErrorKind, DomainResult, domain_error, impl_string_primitive};
 
 /// Todo ID
 pub type TodoId = Id<Todo>;
@@ -24,9 +23,38 @@ pub struct TodoDescription(#[garde(length(chars, min = 1, max = 400))] pub Strin
 impl_string_primitive!(TodoDescription);
 
 /// Todo状態コード
-#[derive(Debug, Clone, garde::Validate)]
-pub struct TodoStatusCode(#[garde(range(min=1, max=i16::MAX))] pub i16);
-impl_int_primitive!(TodoStatusCode, i16);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(i16)]
+pub enum TodoStatusCode {
+    /// 未着手
+    NotStarted = 1,
+    // 進行中
+    InProgress = 2,
+    // 完了
+    Completed = 3,
+    // キャンセル
+    Cancelled = 4,
+    // 保留
+    OnHold = 5,
+}
+
+impl TryFrom<i16> for TodoStatusCode {
+    type Error = DomainError;
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(TodoStatusCode::NotStarted),
+            2 => Ok(TodoStatusCode::InProgress),
+            3 => Ok(TodoStatusCode::Completed),
+            4 => Ok(TodoStatusCode::Cancelled),
+            5 => Ok(TodoStatusCode::OnHold),
+            _ => Err(domain_error(
+                DomainErrorKind::Validation,
+                "Invalid TodoStatusCode",
+            )),
+        }
+    }
+}
 
 /// Todo状態名
 #[derive(Debug, Clone, garde::Validate)]
@@ -126,7 +154,7 @@ impl Todo {
         // 完了している（完了日時地が登録されている）場合
         if let Some(completed_at) = self.completed_at {
             // 状態が完了でなければならない。
-            if self.status.code != TODO_STATUS_CODE_COMPLETED {
+            if self.status.code != TodoStatusCode::Completed {
                 return Err(domain_error(
                     DomainErrorKind::Validation,
                     "status must be completed when completed_at is set",
@@ -171,13 +199,6 @@ pub struct TodoStatus {
     pub updated_at: OffsetDateTime,
 }
 
-/// Todo状態コード
-pub const TODO_STATUS_CODE_NOT_STARTED: i16 = 1; // 未着手
-pub const TODO_STATUS_CODE_IN_PROGRESS: i16 = 2; // 進行中
-pub const TODO_STATUS_CODE_COMPLETED: i16 = 3; // 完了
-pub const TODO_STATUS_CODE_CANCELLED: i16 = 4; // キャンセル
-pub const TODO_STATUS_CODE_ON_HOLD: i16 = 5; // 保留
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,7 +216,7 @@ mod tests {
             given_name: GivenName::new(String::from("John")).unwrap(),
             email: Email::new(String::from("doe@example.com")).unwrap(),
             role: Role {
-                code: RoleCode(1),
+                code: RoleCode::Admin,
                 name: RoleName("管理者".to_string()),
                 description: None,
                 display_order: DisplayOrder(1),
@@ -218,7 +239,7 @@ mod tests {
         let title = TodoTitle::new("Test Title".to_string()).unwrap();
         let description = Some(TodoDescription::new("Test Description".to_string()).unwrap());
         let status = TodoStatus {
-            code: TodoStatusCode(1),
+            code: TodoStatusCode::NotStarted,
             name: TodoStatusName("未着手".to_string()),
             description: None,
             display_order: DisplayOrder(1),
@@ -254,23 +275,24 @@ mod tests {
 
     #[rstest::rstest]
     // 作成日時が更新日時と等しい
-    #[case(datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:00 UTC), None, true)]
+    #[case(TodoStatusCode::NotStarted, None, datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:00 UTC),  true)]
     // 作成日時が更新日時と等しい
-    #[case(datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:01 UTC), None, true)]
+    #[case(TodoStatusCode::InProgress, None, datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:01 UTC),  true)]
     // 作成日時が更新日時と等しい
-    #[case(datetime!(2025-01-01 00:00:01 UTC), datetime!(2025-01-01 00:00:00 UTC), None, false)]
+    #[case(TodoStatusCode::Cancelled, None, datetime!(2025-01-01 00:00:01 UTC), datetime!(2025-01-01 00:00:00 UTC), false)]
     // 完了日時が作成日時と更新日時と等しい
-    #[case(datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:00 UTC), Some(datetime!(2025-01-01 00:00:00 UTC)), true)]
+    #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 00:00:00 UTC)),datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:00 UTC), true)]
     // 完了日時が作成日時よりも後で、更新日時と等しい
-    #[case(datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), Some(datetime!(2025-01-01 01:00:00 UTC)), true)]
+    #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 01:00:00 UTC)), datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), true)]
     // 完了日時が作成日時よりも後で、更新日時と異なる
-    #[case(datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), Some(datetime!(2025-01-01 01:00:01 UTC)), false)]
+    #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 01:00:01 UTC)), datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), false)]
     // 完了日時が作成日時よりも前
-    #[case(datetime!(2025-01-01 00:00:01 UTC), datetime!(2025-01-01 00:00:00 UTC), Some(datetime!(2025-01-01 00:00:00 UTC)), false)]
+    #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 00:00:00 UTC)), datetime!(2025-01-01 00:00:01 UTC), datetime!(2025-01-01 00:00:00 UTC), false)]
     fn todo_new_date_time_related(
+        #[case] todo_status_code: TodoStatusCode,
+        #[case] completed_at: Option<OffsetDateTime>,
         #[case] created_at: OffsetDateTime,
         #[case] updated_at: OffsetDateTime,
-        #[case] completed_at: Option<OffsetDateTime>,
         #[case] expected: bool,
     ) {
         let id = Uuid::new_v4();
@@ -279,8 +301,8 @@ mod tests {
         let title = TodoTitle::new("Test Title".to_string()).unwrap();
         let description = Some(TodoDescription::new("Test Description".to_string()).unwrap());
         let status = TodoStatus {
-            code: TodoStatusCode(1),
-            name: TodoStatusName("未着手".to_string()),
+            code: todo_status_code,
+            name: TodoStatusName("any".to_string()),
             description: None,
             display_order: DisplayOrder(1),
             created_at: OffsetDateTime::now_utc(),
@@ -301,7 +323,7 @@ mod tests {
             updated_at,
         );
         if expected {
-            assert!(result.is_ok());
+            assert!(result.is_ok(), "{}", result.err().unwrap());
         } else {
             assert!(result.is_err());
         }

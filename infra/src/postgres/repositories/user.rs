@@ -527,7 +527,7 @@ impl TryFrom<UserRow> for User {
             given_name: row.given_name.try_into()?,
             email: row.email.try_into()?,
             role: Role {
-                code: RoleCode(row.role_code),
+                code: RoleCode::try_from(row.role_code)?,
                 name: RoleName::new(row.role_name)?,
                 description: row.role_description.map(Description::new).transpose()?,
                 display_order: DisplayOrder(row.role_display_order),

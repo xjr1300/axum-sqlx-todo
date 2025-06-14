@@ -5,6 +5,7 @@ use domain::{
 };
 
 use crate::AuthorizedUser;
+
 /// ユーザーユースケース
 pub struct UserUseCase<UR, TR>
 where

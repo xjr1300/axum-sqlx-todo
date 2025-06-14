@@ -2,8 +2,10 @@ use deadpool_redis::{Connection as RedisConnection, Pool as RedisPool};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretString};
 
-use domain::repositories::{AuthTokenInfo, TokenContent, TokenRepository, divide_auth_token_info};
-use domain::{DomainError, DomainErrorKind, DomainResult};
+use domain::{
+    repositories::{AuthTokenInfo, TokenContent, TokenRepository, divide_auth_token_info},
+    {DomainError, DomainErrorKind, DomainResult},
+};
 
 /// Redisトークンリポジトリ
 #[derive(Clone)]

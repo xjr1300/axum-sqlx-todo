@@ -11,12 +11,6 @@ use infra::{
 
 pub const TEST_DATABASE_PREFIX: &str = "test_todo_db_";
 
-// use once_cell::sync::Lazy;
-// use uuid::Uuid;
-// use domain::models::UserId;
-// pub static TARO_USER_ID: Lazy<UserId> =
-//     Lazy::new(|| UserId::from(Uuid::parse_str("47125c09-1dea-42b2-a14e-357e59acf3dc").unwrap()));
-
 pub struct TestApp {
     pub app_settings: AppSettings,
     pub listener: TcpListener,
@@ -31,9 +25,6 @@ pub fn load_app_settings_for_testing() -> AppSettings {
     if let Ok(rust_log) = std::env::var("RUST_LOG") {
         settings.log_level = log_level_from_str(&rust_log);
     }
-    // let subscriber =
-    //     app::get_subscriber("axum-sqlx-todo".into(), settings.log_level, std::io::stdout);
-    // app::init_subscriber(subscriber);
     settings
 }
 

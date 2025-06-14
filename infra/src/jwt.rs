@@ -149,7 +149,6 @@ pub fn retrieve_claim_from_token(
         messages: vec![format!("The expiration was not valid in claim: {}", expiration).into()],
         source: e.into(),
     })?;
-
     Ok(Claim {
         user_id,
         expiration,

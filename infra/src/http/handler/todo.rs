@@ -153,6 +153,9 @@ impl std::fmt::Display for TodoListQueryParams {
 pub struct TodoCreateRequestBody {
     pub title: String,
     pub description: Option<String>,
+    #[serde(default)]
+    #[serde(serialize_with = "serialize_option_date")]
+    #[serde(deserialize_with = "deserialize_option_date")]
     pub due_date: Option<Date>,
 }
 

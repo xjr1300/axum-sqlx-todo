@@ -1,3 +1,4 @@
+use axum::http::HeaderMap;
 use reqwest::StatusCode;
 use time::{
     OffsetDateTime,
@@ -6,9 +7,7 @@ use time::{
 use uuid::Uuid;
 
 use domain::models::{Todo, TodoStatusCode};
-use infra::http::handler::todo::{
-    TodoCreateRequestBody, TodoListQueryParams, TodoUpdateRequestBody,
-};
+use infra::http::handler::todo::TodoListQueryParams;
 
 use crate::{
     helpers::{ResponseParts, load_app_settings_for_testing, split_response},
@@ -310,22 +309,26 @@ async fn create_todo_with_due_date() {
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
 
     test_case.login_taro().await;
-    let request_body = TodoCreateRequestBody {
-        title: String::from("Rustの学習"),
-        description: Some(String::from("Rustの非同期処理を学ぶ")),
-        due_date: Some(date!(2025 - 06 - 20)),
-    };
-    let response = test_case.todo_create(request_body.clone()).await;
+    let request_body = String::from(
+        r#"
+        {
+            "title": "Rustの学習",
+            "description": "Rustの非同期処理を学ぶ",
+            "dueDate": "2025-06-20"
+        }
+        "#,
+    );
+    let response = test_case.todo_create(request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::CREATED, "{}", body);
     let todo = serde_json::from_str::<Todo>(&body).unwrap();
     assert_eq!(todo.user.id, *TARO_USER_ID);
-    assert_eq!(todo.title, request_body.title.as_str());
+    assert_eq!(todo.title, "Rustの学習");
     assert_eq!(
-        *todo.description.as_ref().unwrap(),
-        request_body.description.as_ref().unwrap().as_str()
+        todo.description.as_ref().unwrap(),
+        &"Rustの非同期処理を学ぶ"
     );
     assert_eq!(todo.status.code, TodoStatusCode::NotStarted);
     assert_eq!(todo.due_date, Some(date!(2025 - 06 - 20)));
@@ -337,20 +340,36 @@ async fn create_todo_with_due_date() {
 // Check that the user can create a todo without a due date.
 #[tokio::test]
 #[ignore]
-async fn create_todo_without_due_date() {
+async fn create_todo_without_description_and_due_date() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
 
     test_case.login_taro().await;
-    let request_body = TodoCreateRequestBody {
-        title: String::from("Rustの学習"),
-        ..Default::default()
-    };
-    let response = test_case.todo_create(request_body.clone()).await;
-    let ResponseParts { body, .. } = split_response(response).await;
-    let todo = serde_json::from_str::<Todo>(&body).unwrap();
-    assert!(todo.description.is_none());
-    assert!(todo.due_date.is_none());
+    let request_bodies = vec![
+        String::from(
+            r#"
+            {
+                "title": "Rustの学習",
+                "description": null,
+                "dueDate": null
+            }
+            "#,
+        ),
+        String::from(
+            r#"
+            {
+                "title": "Rustの学習"
+            }
+            "#,
+        ),
+    ];
+    for request_body in request_bodies {
+        let response = test_case.todo_create(request_body.clone()).await;
+        let ResponseParts { body, .. } = split_response(response).await;
+        let todo = serde_json::from_str::<Todo>(&body).unwrap();
+        assert!(todo.description.is_none());
+        assert!(todo.due_date.is_none());
+    }
 
     test_case.end().await;
 }
@@ -367,13 +386,23 @@ async fn anonymous_user_can_not_access_the_create_todo_endpoint() {
         .cookie_store(true)
         .build()
         .unwrap();
-    let request_body = TodoCreateRequestBody {
-        title: String::from("Rustの学習"),
-        description: Some(String::from("Rustの非同期処理を学ぶ")),
-        due_date: Some(date!(2025 - 06 - 20)),
-    };
+    let request_body = String::from(
+        r#"
+            {
+                "title": "Rustの学習"
+            }
+            "#,
+    );
+    let mut headers = HeaderMap::new();
+    headers.insert("Content-Type", "application/json".parse().unwrap());
     let uri = format!("{}/todos", test_case.origin());
-    let response = client.post(&uri).json(&request_body).send().await.unwrap();
+    let response = client
+        .post(&uri)
+        .headers(headers)
+        .body(request_body)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     test_case.end().await;
@@ -388,14 +417,19 @@ async fn user_can_update_todo() {
 
     test_case.login_taro().await;
     let todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("Rustの学習を深める")),
-        description: Some(String::from("Rustの非同期処理とエラーハンドリングを学ぶ")),
-        status_code: Some(TodoStatusCode::NotStarted as i16),
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
+    let request_body = format!(
+        r#"
+        {{
+            "title": "Rustの学習を深める",
+            "description": "Rustの非同期処理とエラーハンドリングを学ぶ",
+            "statusCode": {},
+            "dueDate": "2025-06-30"
+        }}
+        "#,
+        TodoStatusCode::NotStarted as i16
+    );
     let requested_at = OffsetDateTime::now_utc();
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -425,13 +459,14 @@ async fn user_can_update_todo_with_each_specified_field() {
     let todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
 
     // Update only the title of the todo
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("Rustの学習を深める")),
-        description: None,
-        status_code: None,
-        due_date: None,
-    };
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
+    let request_body = String::from(
+        r#"
+        {
+            "title": "Rustの学習を深める"
+        }
+        "#,
+    );
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -443,13 +478,14 @@ async fn user_can_update_todo_with_each_specified_field() {
     assert_eq!(todo.due_date.unwrap(), date!(2025 - 06 - 12));
 
     // Update only the description of the todo
-    let request_body = TodoUpdateRequestBody {
-        title: None,
-        description: Some(String::from("Rustの非同期処理とエラーハンドリングを学ぶ")),
-        status_code: None,
-        due_date: None,
-    };
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
+    let request_body = String::from(
+        r#"
+        {
+            "description": "Rustの非同期処理とエラーハンドリングを学ぶ"
+        }
+        "#,
+    );
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -464,13 +500,15 @@ async fn user_can_update_todo_with_each_specified_field() {
     assert_eq!(todo.due_date.unwrap(), date!(2025 - 06 - 12));
 
     // Update only the status of the todo
-    let request_body = TodoUpdateRequestBody {
-        title: None,
-        description: None,
-        status_code: Some(TodoStatusCode::NotStarted as i16),
-        due_date: None,
-    };
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
+    let request_body = format!(
+        r#"
+        {{
+            "statusCode": {}
+        }}
+        "#,
+        TodoStatusCode::NotStarted as i16
+    );
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -485,13 +523,14 @@ async fn user_can_update_todo_with_each_specified_field() {
     assert_eq!(todo.due_date.unwrap(), date!(2025 - 06 - 12));
 
     // Update only the due date of the todo
-    let request_body = TodoUpdateRequestBody {
-        title: None,
-        description: None,
-        status_code: None,
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
+    let request_body = String::from(
+        r#"
+        {
+            "dueDate": "2025-06-30"
+        }
+        "#,
+    );
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -515,26 +554,35 @@ async fn user_can_not_update_todo_without_specifying_any_fields() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
 
+    let request_bodies = vec![
+        String::from(
+            r#"
+            {
+                "title": null,
+                "description": null,
+                "statusCode": null,
+                "dueDate": null
+            }
+            "#,
+        ),
+        String::from("{}"),
+    ];
     test_case.login_taro().await;
     let todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
-    let request_body = TodoUpdateRequestBody {
-        title: None,
-        description: None,
-        status_code: None,
-        due_date: None,
-    };
-    let requested_at = OffsetDateTime::now_utc();
-    let response = test_case.todo_update(todo_id, request_body.clone()).await;
-    let ResponseParts {
-        status_code, body, ..
-    } = split_response(response).await;
-    assert_eq!(status_code, StatusCode::OK, "{}", body);
-    let todo = serde_json::from_str::<Todo>(&body).unwrap();
-    assert_eq!(todo.title, "チームミーティング");
-    assert_eq!(todo.description.unwrap(), "プロジェクトの進捗確認");
-    assert_eq!(todo.status.code, TodoStatusCode::InProgress);
-    assert_eq!(todo.due_date.unwrap(), date!(2025 - 06 - 12));
-    assert!(todo.updated_at > requested_at);
+    for request_body in request_bodies {
+        let requested_at = OffsetDateTime::now_utc();
+        let response = test_case.todo_update(todo_id, request_body.clone()).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::OK, "{}", body);
+        let todo = serde_json::from_str::<Todo>(&body).unwrap();
+        assert_eq!(todo.title, "チームミーティング");
+        assert_eq!(todo.description.unwrap(), "プロジェクトの進捗確認");
+        assert_eq!(todo.status.code, TodoStatusCode::InProgress);
+        assert_eq!(todo.due_date.unwrap(), date!(2025 - 06 - 12));
+        assert!(todo.updated_at > requested_at);
+    }
 
     test_case.end().await;
 }
@@ -550,12 +598,16 @@ async fn user_can_not_update_if_todo_is_completed_or_archived() {
 
     test_case.login_taro().await;
     for todo_id in [completed_todo_id, archived_todo_id] {
-        let request_body = TodoUpdateRequestBody {
-            title: Some(String::from("更新できないタイトル")),
-            description: Some(String::from("更新できない説明")),
-            status_code: Some(TodoStatusCode::InProgress as i16),
-            due_date: Some(date!(2025 - 06 - 30)),
-        };
+        let request_body = String::from(
+            r#"
+            {
+                "title": "更新できないタイトル",
+                "description": "更新できない説明",
+                "statusCode": 1,
+                "dueDate": "2025-06-30"
+            }
+            "#,
+        );
         let response = test_case.todo_update(todo_id, request_body).await;
         let ResponseParts {
             status_code, body, ..
@@ -580,12 +632,16 @@ async fn user_can_not_update_todo_that_belongs_to_another_user() {
 
     test_case.login_taro().await;
     let another_user_todo_id = "653acf81-a2e6-43cb-b4b4-9cdb822c740e";
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("更新できないタイトル")),
-        description: Some(String::from("更新できない説明")),
-        status_code: Some(TodoStatusCode::InProgress as i16),
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
+    let request_body = String::from(
+        r#"
+        {
+            "title": "更新できないタイトル",
+            "description": "更新できない説明",
+            "statusCode": 1,
+            "dueDate": "2025-06-30"
+        }
+        "#,
+    );
     let response = test_case
         .todo_update(another_user_todo_id, request_body)
         .await;
@@ -611,12 +667,16 @@ async fn user_can_not_update_todo_that_is_not_recorded_in_any_todos() {
 
     test_case.login_taro().await;
     let todo_id = Uuid::new_v4().to_string();
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("更新できないタイトル")),
-        description: Some(String::from("更新できない説明")),
-        status_code: Some(TodoStatusCode::InProgress as i16),
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
+    let request_body = String::from(
+        r#"
+        {
+            "title": "更新できないタイトル",
+            "description": "更新できない説明",
+            "statusCode": 1,
+            "dueDate": "2025-06-30"
+        }
+        "#,
+    );
     let response = test_case.todo_update(&todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
@@ -635,12 +695,17 @@ async fn user_can_not_update_todo_if_user_specifies_invalid_todo_id() {
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
 
     test_case.login_taro().await;
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("更新できないタイトル")),
-        description: Some(String::from("更新できない説明")),
-        status_code: Some(TodoStatusCode::InProgress as i16),
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
+    let request_body = String::from(
+        r#"
+        {
+            "id": "invalid-todo-id",
+            "title": "更新できないタイトル",
+            "description": "更新できない説明",
+            "statusCode": -32768,
+            "dueDate": "2025-06-30"
+        }
+        "#,
+    );
     let response = test_case.todo_update("invalid-todo-id", request_body).await;
     let ResponseParts {
         status_code, body, ..
@@ -660,12 +725,16 @@ async fn user_can_not_update_todo_if_user_specifies_an_invalid_status_code() {
 
     test_case.login_taro().await;
     let todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
-    let request_body = TodoUpdateRequestBody {
-        title: Some(String::from("更新できないタイトル")),
-        description: Some(String::from("更新できない説明")),
-        status_code: Some(i16::MIN),
-        due_date: Some(date!(2025 - 06 - 30)),
-    };
+    let request_body = String::from(
+        r#"
+        {
+            "title": "更新できないタイトル",
+            "description": "更新できない説明",
+            "statusCode": -32768,
+            "dueDate": "2025-06-30"
+        }
+        "#,
+    );
     let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
@@ -692,9 +761,7 @@ async fn user_can_not_update_todo_if_user_specifies_an_invalid_due_date() {
         }
         "#,
     );
-    let response = test_case
-        .todo_update_by_raw_body(todo_id, request_body)
-        .await;
+    let response = test_case.todo_update(todo_id, request_body).await;
     let ResponseParts {
         status_code, body, ..
     } = split_response(response).await;
@@ -717,14 +784,27 @@ async fn anonymous_user_can_not_access_the_update_todo_endpoint() {
         .cookie_store(true)
         .build()
         .unwrap();
-    let request_body = TodoUpdateRequestBody {
-        title: None,
-        description: None,
-        status_code: None,
-        due_date: None,
-    };
+    let request_body = format!(
+        r#"
+        {{
+            "title": "Rustの学習を深める",
+            "description": "Rustの非同期処理とエラーハンドリングを学ぶ",
+            "statusCode": {},
+            "dueDate": "2025-06-30"
+        }}
+        "#,
+        TodoStatusCode::NotStarted as i16
+    );
+    let mut headers = HeaderMap::new();
+    headers.insert("Content-Type", "application/json".parse().unwrap());
     let uri = format!("{}/todos/{}", test_case.origin(), todo_id);
-    let response = client.patch(&uri).json(&request_body).send().await.unwrap();
+    let response = client
+        .patch(&uri)
+        .headers(headers)
+        .body(request_body)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     test_case.end().await;

@@ -15,9 +15,11 @@
 use std::{thread::JoinHandle, time::Duration};
 
 use axum::http::HeaderMap;
+use once_cell::sync::Lazy;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
+use uuid::Uuid;
 
 use app::{get_subscriber, init_subscriber};
 use domain::{
@@ -28,16 +30,11 @@ use domain::{
 };
 use infra::{
     AppState,
-    http::handler::{
-        todo::{TodoCreateRequestBody, TodoListQueryParams, TodoUpdateRequestBody},
-        user::UpdateUserRequestBody,
-    },
+    http::handler::{todo::TodoListQueryParams, user::UpdateUserRequestBody},
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
     settings::AppSettings,
 };
-use once_cell::sync::Lazy;
-use uuid::Uuid;
 
 use crate::helpers::{TestApp, configure_test_app, spawn_app};
 
@@ -247,31 +244,20 @@ impl TestCase {
         self.http_client.get(&uri).send().await.unwrap()
     }
 
-    pub async fn todo_create(&self, body: TodoCreateRequestBody) -> reqwest::Response {
+    pub async fn todo_create(&self, body: String) -> reqwest::Response {
+        let mut headers = HeaderMap::new();
+        headers.append("Content-Type", "application/json".parse().unwrap());
         let uri = format!("{}/todos", self.origin());
         self.http_client
             .post(&uri)
-            .json(&body)
+            .headers(headers)
+            .body(body)
             .send()
             .await
             .unwrap()
     }
 
-    pub async fn todo_update(
-        &self,
-        todo_id: &str,
-        body: TodoUpdateRequestBody,
-    ) -> reqwest::Response {
-        let uri = format!("{}/todos/{}", self.origin(), todo_id);
-        self.http_client
-            .patch(&uri)
-            .json(&body)
-            .send()
-            .await
-            .unwrap()
-    }
-
-    pub async fn todo_update_by_raw_body(&self, todo_id: &str, body: String) -> reqwest::Response {
+    pub async fn todo_update(&self, todo_id: &str, body: String) -> reqwest::Response {
         let mut headers = HeaderMap::new();
         headers.append("Content-Type", "application/json".parse().unwrap());
         let uri = format!("{}/todos/{}", self.origin(), todo_id);

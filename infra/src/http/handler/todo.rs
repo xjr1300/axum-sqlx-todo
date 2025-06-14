@@ -11,10 +11,13 @@ use uuid::Uuid;
 use domain::{
     NumericOperator,
     models::{Todo, TodoDescription, TodoId, TodoStatusCode, TodoTitle},
-    repositories::{TodoCreateInput, TodoListInput},
+    repositories::{TodoCreateInput, TodoListInput, TodoUpdateInput},
 };
 use use_case::AuthorizedUser;
-use utils::{serde::deserialize_option_split_comma, time::DATE_FORMAT};
+use utils::{
+    serde::{deserialize_option_date, deserialize_option_split_comma, serialize_option_date},
+    time::DATE_FORMAT,
+};
 
 use crate::{
     AppState,
@@ -73,15 +76,31 @@ pub async fn by_id(
 pub async fn create(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
-    Json(request_body): Json<TodoCreateRequestBody>,
+    Json(body): Json<TodoCreateRequestBody>,
 ) -> ApiResult<impl IntoResponse> {
-    let input = TodoCreateInput::try_from(request_body)?;
+    let input = TodoCreateInput::try_from(body)?;
     let use_case = todo_use_case(&app_state);
-    let created_todo = use_case
+    let todo = use_case
         .create(auth_user, input)
         .await
         .map_err(ApiError::from)?;
-    Ok((StatusCode::CREATED, Json(created_todo)))
+    Ok((StatusCode::CREATED, Json(todo)))
+}
+
+pub async fn update(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+    todo_id: Path<Uuid>,
+    Json(body): Json<TodoUpdateRequestBody>,
+) -> ApiResult<Json<Todo>> {
+    let todo_id = TodoId::from(todo_id.0);
+    let input = TodoUpdateInput::try_from(body)?;
+    let use_case = todo_use_case(&app_state);
+    let updated_todo = use_case
+        .update(auth_user, todo_id, input)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(updated_todo))
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -149,6 +168,43 @@ impl TryFrom<TodoCreateRequestBody> for TodoCreateInput {
                 .transpose()
                 .map_err(ApiError::from)?,
             due_date: value.due_date,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoUpdateRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<i16>,
+    #[serde(default)]
+    #[serde(serialize_with = "serialize_option_date")]
+    #[serde(deserialize_with = "deserialize_option_date")]
+    pub due_date: Option<Date>,
+}
+
+impl TryFrom<TodoUpdateRequestBody> for TodoUpdateInput {
+    type Error = ApiError;
+
+    fn try_from(body: TodoUpdateRequestBody) -> Result<Self, Self::Error> {
+        Ok(TodoUpdateInput {
+            title: body
+                .title
+                .map(|title| TodoTitle::new(title).map_err(ApiError::from))
+                .transpose()?,
+            description: body
+                .description
+                .map(|desc| TodoDescription::new(desc).map_err(ApiError::from))
+                .transpose()?,
+            status_code: body
+                .status_code
+                .map(|code| TodoStatusCode::try_from(code).map_err(ApiError::from))
+                .transpose()?,
+            due_date: body.due_date,
         })
     }
 }

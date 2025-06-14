@@ -62,16 +62,14 @@ impl TryFrom<SignUpRequestBody> for UserInput {
 #[tracing::instrument(skip(app_state))]
 pub async fn sign_up(
     State(app_state): State<AppState>,
-    Json(request_body): Json<SignUpRequestBody>,
+    Json(body): Json<SignUpRequestBody>,
 ) -> ApiResult<Json<User>> {
     // パスワードの検証とハッシュ化
-    let raw_password = RawPassword::new(request_body.password.clone()).map_err(ApiError::from)?;
+    let raw_password = RawPassword::new(body.password.clone()).map_err(ApiError::from)?;
     let hashed_password = create_hashed_password(&app_state.app_settings.password, &raw_password)
         .map_err(ApiError::from)?;
-
     // リクエストボディをUserInputに変換
-    let input = UserInput::try_from(request_body).map_err(ApiError::from)?;
-
+    let input = UserInput::try_from(body).map_err(ApiError::from)?;
     // ユーザーを登録
     let use_case = user_use_case(&app_state);
     let user = use_case
@@ -105,34 +103,30 @@ pub struct LoginResponseBody {
 #[tracing::instrument(skip(app_state))]
 pub async fn login(
     State(app_state): State<AppState>,
-    Json(request_body): Json<LoginRequestBody>,
+    Json(body): Json<LoginRequestBody>,
 ) -> ApiResult<Response<Body>> {
     let requested_at = OffsetDateTime::now_utc();
     let settings = &app_state.app_settings;
     let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
     let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-
     // Eメールアドレスからユーザーを取得
-    let email =
-        Email::new(request_body.email).map_err(|_| bad_request("Invalid email address".into()))?;
+    let email = Email::new(body.email).map_err(|_| bad_request("Invalid email address".into()))?;
     let user = user_repo
         .by_email(&email)
         .await
         .map_err(internal_server_error)?
         .ok_or_else(login_failed)?;
-    tracing::debug!("User found: {}", user.email);
     // ユーザーのアクティブフラグを確認
     if !user.active {
         return Err(user_locked());
     }
-    tracing::debug!("User is active: {}", user.email);
     // ユーザーのハッシュ化されたパスワードを取得
     let hashed_password = user_repo
         .get_hashed_password(user.id)
         .await
         .map_err(internal_server_error)?;
     // ユーザーのパスワードを検証
-    let raw_password = RawPassword::new(request_body.password).map_err(|_| login_failed())?;
+    let raw_password = RawPassword::new(body.password).map_err(|_| login_failed())?;
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
@@ -156,8 +150,11 @@ pub async fn me(
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateUserRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub family_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub given_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 }
 
@@ -178,9 +175,9 @@ impl TryFrom<UpdateUserRequestBody> for UpdateUserInput {
 pub async fn update(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
-    Json(request_body): Json<UpdateUserRequestBody>,
+    Json(body): Json<UpdateUserRequestBody>,
 ) -> ApiResult<Json<User>> {
-    let input = UpdateUserInput::try_from(request_body)?;
+    let input = UpdateUserInput::try_from(body)?;
     let use_case = user_use_case(&app_state);
     let user = use_case
         .update(auth_user, input)
@@ -202,7 +199,7 @@ pub struct RefreshTokensRequestBody {
 pub async fn refresh_tokens(
     cookie_jar: CookieJar,
     State(app_state): State<AppState>,
-    request_body: Option<Json<RefreshTokensRequestBody>>,
+    body: Option<Json<RefreshTokensRequestBody>>,
 ) -> ApiResult<Response<Body>> {
     let requested_at = OffsetDateTime::now_utc();
     // クッキーからリフレッシュトークンを取得
@@ -212,9 +209,9 @@ pub async fn refresh_tokens(
         refresh_token = Some(SecretString::new(cookie_value.value().into()));
     }
     // リクエストボディからリフレッシュトークンを取得
-    if refresh_token.is_none() && request_body.is_some() {
+    if refresh_token.is_none() && body.is_some() {
         tracing::debug!("Found a refresh token in body");
-        refresh_token = Some(request_body.unwrap().0.refresh_token);
+        refresh_token = Some(body.unwrap().0.refresh_token);
     }
     // リフレッシュトークンが見つからない場合は、401 Unauthorizedを返す
     let refresh_token = refresh_token.ok_or_else(unauthorized)?;

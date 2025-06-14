@@ -153,7 +153,7 @@ VALUES
         4,
         NULL,
         NULL,
-        FALSE,
+        TRUE,
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP
     ),

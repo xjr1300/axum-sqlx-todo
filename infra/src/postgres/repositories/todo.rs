@@ -125,14 +125,12 @@ impl TodoRepository for PgTodoRepository {
             WITH updated AS (
                 UPDATE todos
                 SET
-                    title = $1,
-                    description = $2,
-                    todo_status_code = $3,
-                    due_date = $4,
-                    completed_at = $5,
-                    archived = $6,
+                    title = COALESCE($1, title),
+                    description = COALESCE($2, description),
+                    todo_status_code = COALESCE($3, todo_status_code),
+                    due_date = COALESCE($4, due_date),
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $7
+                WHERE id = $5
                 RETURNING
                     id, user_id, title, description, todo_status_code,
                     due_date, completed_at, archived, created_at, updated_at
@@ -152,12 +150,10 @@ impl TodoRepository for PgTodoRepository {
             INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
-            todo.title.0,
+            todo.title.map(|t| t.0),
             todo.description.map(|d| d.0),
-            todo.todo_status_code as i16,
-            todo.due_date,
-            todo.completed_at,
-            todo.archived,
+            todo.status_code.map(|c| c as i16),
+            todo.due_date.map(|d| d),
             id.0
         )
         .fetch_optional(&mut *tx)

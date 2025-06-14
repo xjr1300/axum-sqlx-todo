@@ -2,7 +2,38 @@ use std::{fmt::Display, str::FromStr};
 
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Deserializer, Serializer, de::Error};
-use time::{OffsetDateTime, serde::rfc3339};
+use time::{Date, OffsetDateTime, serde::rfc3339};
+
+use crate::time::DATE_FORMAT;
+
+pub fn serialize_option_date<S>(dt: &Option<Date>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match dt {
+        Some(dt) => serializer.serialize_str(&dt.format(DATE_FORMAT).unwrap()),
+        None => serializer.serialize_none(),
+    }
+}
+
+pub fn deserialize_date<'de, D>(deserializer: D) -> Result<Date, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: String = String::deserialize(deserializer)?;
+    Date::parse(&value, DATE_FORMAT).map_err(Error::custom)
+}
+
+pub fn deserialize_option_date<'de, D>(deserializer: D) -> Result<Option<Date>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Wrapper(#[serde(deserialize_with = "deserialize_date")] Date);
+
+    let value: Option<Wrapper> = Option::deserialize(deserializer)?;
+    Ok(value.map(|Wrapper(dt)| dt))
+}
 
 pub fn serialize_option_offset_datetime<S>(
     dt: &Option<OffsetDateTime>,

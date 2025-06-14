@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use time::{Date, OffsetDateTime};
 
-use utils::serde::{deserialize_option_offset_datetime, serialize_option_offset_datetime};
+use utils::serde::{
+    deserialize_option_date, deserialize_option_offset_datetime, serialize_option_date,
+    serialize_option_offset_datetime,
+};
 
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
@@ -50,7 +53,7 @@ impl TryFrom<i16> for TodoStatusCode {
             5 => Ok(TodoStatusCode::OnHold),
             _ => Err(domain_error(
                 DomainErrorKind::Validation,
-                "Invalid TodoStatusCode",
+                "Invalid todo status code",
             )),
         }
     }
@@ -75,6 +78,8 @@ pub struct Todo {
     /// 状態
     pub status: TodoStatus,
     /// 完了予定日
+    #[serde(serialize_with = "serialize_option_date")]
+    #[serde(deserialize_with = "deserialize_option_date")]
     pub due_date: Option<Date>,
     /// 完了日時
     #[serde(serialize_with = "serialize_option_offset_datetime")]

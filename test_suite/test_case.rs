@@ -14,6 +14,7 @@
 //! So you must run the `bin/drop_test_dbs.sh` script to drop all the test databases.
 use std::{thread::JoinHandle, time::Duration};
 
+use axum::http::HeaderMap;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -28,7 +29,7 @@ use domain::{
 use infra::{
     AppState,
     http::handler::{
-        todo::{TodoCreateRequestBody, TodoListQueryParams},
+        todo::{TodoCreateRequestBody, TodoListQueryParams, TodoUpdateRequestBody},
         user::UpdateUserRequestBody,
     },
     postgres::repositories::PgUserRepository,
@@ -149,19 +150,19 @@ impl TestCase {
         )
     }
 
-    pub async fn user_by_id(&self, id: UserId) -> Option<User> {
+    pub async fn user_by_id(&self, user_id: UserId) -> Option<User> {
         let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
-        user_repo.by_id(id).await.unwrap()
+        user_repo.by_id(user_id).await.unwrap()
     }
 
-    pub async fn get_login_failed_history(&self, id: UserId) -> Option<LoginFailedHistory> {
+    pub async fn get_login_failed_history(&self, user_id: UserId) -> Option<LoginFailedHistory> {
         let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
-        user_repo.get_login_failed_history(id).await.unwrap()
+        user_repo.get_login_failed_history(user_id).await.unwrap()
     }
 
-    pub async fn user_tokens_from_user_repo(&self, id: UserId) -> Vec<UserToken> {
+    pub async fn user_tokens_from_user_repo(&self, user_id: UserId) -> Vec<UserToken> {
         let user_repo = PgUserRepository::new(self.app_state.pg_pool.clone());
-        user_repo.user_tokens_by_id(id).await.unwrap()
+        user_repo.user_tokens_by_id(user_id).await.unwrap()
     }
 
     pub async fn token_content_from_token_repo(
@@ -173,12 +174,16 @@ impl TestCase {
         token_repo.get_token_content(&key).await.unwrap()
     }
 
-    pub async fn set_user_active_status(&self, id: UserId, active: bool) {
+    pub async fn set_user_active_status(&self, user_id: UserId, active: bool) {
         let mut tx = self.app_state.pg_pool.begin().await.unwrap();
-        sqlx::query!("UPDATE users SET active = $1 WHERE id = $2", active, id.0)
-            .execute(&mut *tx)
-            .await
-            .unwrap();
+        sqlx::query!(
+            "UPDATE users SET active = $1 WHERE id = $2",
+            active,
+            user_id.0
+        )
+        .execute(&mut *tx)
+        .await
+        .unwrap();
         tx.commit().await.unwrap();
     }
 
@@ -225,9 +230,9 @@ impl TestCase {
         self.login(&body).await;
     }
 
-    pub async fn todo_list(&self, body: Option<TodoListQueryParams>) -> reqwest::Response {
+    pub async fn todo_list(&self, params: Option<TodoListQueryParams>) -> reqwest::Response {
         let uri = format!("{}/todos", self.origin());
-        match body {
+        match params {
             Some(body) => {
                 let params = body.to_string();
                 let uri = format!("{}?{}", uri, params);
@@ -237,16 +242,43 @@ impl TestCase {
         }
     }
 
-    pub async fn todo_get_by_id(&self, id: &str) -> reqwest::Response {
-        let uri = format!("{}/todos/{}", self.origin(), id);
+    pub async fn todo_get_by_id(&self, tood_id: &str) -> reqwest::Response {
+        let uri = format!("{}/todos/{}", self.origin(), tood_id);
         self.http_client.get(&uri).send().await.unwrap()
     }
 
-    pub async fn todo_create(&self, request_body: TodoCreateRequestBody) -> reqwest::Response {
+    pub async fn todo_create(&self, body: TodoCreateRequestBody) -> reqwest::Response {
         let uri = format!("{}/todos", self.origin());
         self.http_client
             .post(&uri)
-            .json(&request_body)
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    pub async fn todo_update(
+        &self,
+        todo_id: &str,
+        body: TodoUpdateRequestBody,
+    ) -> reqwest::Response {
+        let uri = format!("{}/todos/{}", self.origin(), todo_id);
+        self.http_client
+            .patch(&uri)
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    pub async fn todo_update_by_raw_body(&self, todo_id: &str, body: String) -> reqwest::Response {
+        let mut headers = HeaderMap::new();
+        headers.append("Content-Type", "application/json".parse().unwrap());
+        let uri = format!("{}/todos/{}", self.origin(), todo_id);
+        self.http_client
+            .patch(&uri)
+            .headers(headers)
+            .body(body)
             .send()
             .await
             .unwrap()

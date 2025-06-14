@@ -1,4 +1,4 @@
-use time::{Date, OffsetDateTime};
+use time::Date;
 
 use crate::{
     DateFilter, DomainErrorKind, DomainResult, NUMERIC_FILTER_MISSING_FROM, NumericOperator,
@@ -18,6 +18,9 @@ pub trait TodoRepository {
     async fn create(&self, user_id: UserId, input: TodoCreateInput) -> DomainResult<Todo>;
 
     /// Todoを更新する。
+    ///
+    /// Todoの状態は未着手、進行中、キャンセル、保留のみに変更できる。
+    /// Todoの状態を完了にする場合は`complete`メソッドを使用する。
     async fn update(&self, id: TodoId, todo: TodoUpdateInput) -> DomainResult<Todo>;
 
     /// Todoを完了する。
@@ -88,15 +91,11 @@ pub struct TodoCreateInput {
 
 pub struct TodoUpdateInput {
     /// タイトル
-    pub title: TodoTitle,
+    pub title: Option<TodoTitle>,
     /// 説明
     pub description: Option<TodoDescription>,
     /// 状態コード
-    pub todo_status_code: TodoStatusCode,
+    pub status_code: Option<TodoStatusCode>,
     /// 完了予定日
     pub due_date: Option<Date>,
-    /// 完了日時
-    pub completed_at: Option<OffsetDateTime>,
-    /// アーカイブ済み
-    pub archived: bool,
 }

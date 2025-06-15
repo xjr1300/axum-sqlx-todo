@@ -307,6 +307,13 @@ fn list_where_clause(input: &TodoListInput, todos_table: &str) -> String {
                 .join(", ")
         ));
     }
+    if let Some(archived) = input.archived {
+        condition.push_str(&format!(
+            " AND {}.archived = {}",
+            todos_table,
+            if archived { "TRUE" } else { "FALSE" },
+        ));
+    }
     condition.push(' ');
     condition
 }

@@ -36,6 +36,7 @@ pub async fn list(
         from,
         to,
         statuses,
+        archived,
     } = query.0;
 
     let statuses = if let Some(statuses) = statuses {
@@ -49,8 +50,8 @@ pub async fn list(
     } else {
         None
     };
-    let input =
-        TodoListInput::new(user.0.id, keyword, op, from, to, statuses).map_err(ApiError::from)?;
+    let input = TodoListInput::new(user.0.id, keyword, op, from, to, statuses, archived)
+        .map_err(ApiError::from)?;
     let use_case = todo_use_case(&app_state);
     let todos = use_case.list(input).await.map_err(ApiError::from)?;
     Ok(Json(todos))
@@ -131,6 +132,8 @@ pub struct TodoListQueryParams {
     /// タスクのステータス
     #[serde(default, deserialize_with = "deserialize_option_split_comma")]
     pub statuses: Option<Vec<i16>>,
+    /// アーカイブされたタスクを含めるかどうか
+    pub archived: Option<bool>,
 }
 
 impl std::fmt::Display for TodoListQueryParams {
@@ -157,6 +160,9 @@ impl std::fmt::Display for TodoListQueryParams {
                     .collect::<Vec<String>>()
                     .join(",")
             ));
+        }
+        if let Some(archived) = self.archived {
+            params.push(format!("archived={}", archived));
         }
         write!(f, "{}", params.join("&"))
     }

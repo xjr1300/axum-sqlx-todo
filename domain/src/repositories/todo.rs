@@ -42,6 +42,8 @@ pub struct TodoListInput {
     pub filter: Option<DateFilter>,
     /// 状態コード
     pub statuses: Option<Vec<TodoStatusCode>>,
+    /// アーカイブ
+    pub archived: Option<bool>,
 }
 
 impl TodoListInput {
@@ -52,6 +54,7 @@ impl TodoListInput {
         from: Option<Date>,
         to: Option<Date>,
         statuses: Option<Vec<TodoStatusCode>>,
+        archived: Option<bool>,
     ) -> DomainResult<Self> {
         if op.is_some() && from.is_none() {
             return Err(domain_error(
@@ -65,6 +68,7 @@ impl TodoListInput {
             keyword,
             filter: due_date_filter,
             statuses,
+            archived,
         })
     }
 
@@ -74,6 +78,7 @@ impl TodoListInput {
             keyword: None,
             filter: None,
             statuses: None,
+            archived: None,
         }
     }
 }

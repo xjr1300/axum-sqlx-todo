@@ -217,6 +217,42 @@ async fn the_user_can_get_their_own_todo_list_by_todo_statuses() {
     test_case.end().await;
 }
 
+#[tokio::test]
+#[ignore]
+async fn the_user_can_get_their_own_todo_list_by_archived() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let cases = [
+        (
+            TodoListQueryParams {
+                archived: Some(false),
+                ..Default::default()
+            },
+            12,
+        ),
+        (
+            TodoListQueryParams {
+                archived: Some(true),
+                ..Default::default()
+            },
+            1,
+        ),
+    ];
+
+    test_case.login_taro().await;
+    for (body, expected) in cases {
+        let response = test_case.todo_list(Some(body)).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::OK, "{}", body);
+        let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
+        assert_eq!(todos.len(), expected, "{}", body);
+    }
+
+    test_case.end().await;
+}
+
 /// Check that the anonymous user can not access the todo list endpoint.
 #[tokio::test]
 #[ignore]

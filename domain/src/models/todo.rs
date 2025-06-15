@@ -59,6 +59,10 @@ impl TryFrom<i16> for TodoStatusCode {
     }
 }
 
+/// 完了可能なTodo状態のコード
+pub const COMPLETABLE_TODO_STATUS_CODES: [TodoStatusCode; 2] =
+    [TodoStatusCode::NotStarted, TodoStatusCode::InProgress];
+
 /// Todo状態名
 #[derive(Debug, Clone, garde::Validate)]
 pub struct TodoStatusName(#[garde(length(chars, min = 1, max = 50))] pub String);

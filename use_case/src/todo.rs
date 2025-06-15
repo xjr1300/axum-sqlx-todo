@@ -1,6 +1,6 @@
 use domain::{
     DomainErrorKind, DomainResult, domain_error,
-    models::{Todo, TodoId, TodoStatusCode},
+    models::{COMPLETABLE_TODO_STATUS_CODES, Todo, TodoId, TodoStatusCode},
     repositories::{TodoCreateInput, TodoListInput, TodoRepository, TodoUpdateInput},
 };
 
@@ -67,17 +67,7 @@ where
         input: TodoUpdateInput,
     ) -> DomainResult<Todo> {
         // Todoを取得して、認証されたユーザーが所有するTodoが確認
-        let todo = self
-            .todo_repo
-            .by_id(todo_id)
-            .await?
-            .ok_or_else(|| domain_error(DomainErrorKind::NotFound, "Todo not found"))?;
-        if todo.user.id != auth_user.0.id {
-            return Err(domain_error(
-                DomainErrorKind::Forbidden,
-                "You are not authorized to update this todo",
-            ));
-        }
+        let todo = get_authorized_user_own_todo(&self.todo_repo, &auth_user, todo_id).await?;
         // 完了したTodoまたはアーカイブされたTodoは更新不可
         if todo.status.code == TodoStatusCode::Completed || todo.archived {
             return Err(domain_error(
@@ -87,4 +77,35 @@ where
         }
         self.todo_repo.update(todo_id, input).await
     }
+
+    pub async fn complete(&self, auth_user: AuthorizedUser, todo_id: TodoId) -> DomainResult<Todo> {
+        // Todoを取得して、認証されたユーザーが所有するTodoが確認
+        let todo = get_authorized_user_own_todo(&self.todo_repo, &auth_user, todo_id).await?;
+        // 未着手、進行中のTodo以外またはアーカイブされたTodoは完了不可
+        if !COMPLETABLE_TODO_STATUS_CODES.contains(&todo.status.code) || todo.archived {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Only todos with status 'NotStarted' or 'InProgress' can be completed, and archived todos cannot be completed",
+            ));
+        }
+        self.todo_repo.complete(todo_id).await
+    }
+}
+
+async fn get_authorized_user_own_todo<TR: TodoRepository>(
+    todo_repo: &TR,
+    auth_user: &AuthorizedUser,
+    todo_id: TodoId,
+) -> DomainResult<Todo> {
+    let todo = todo_repo
+        .by_id(todo_id)
+        .await?
+        .ok_or_else(|| domain_error(DomainErrorKind::NotFound, "Todo not found"))?;
+    if todo.user.id != auth_user.0.id {
+        return Err(domain_error(
+            DomainErrorKind::Forbidden,
+            "You are not authorized to update this todo",
+        ));
+    }
+    Ok(todo)
 }

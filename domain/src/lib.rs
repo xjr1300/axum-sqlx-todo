@@ -79,6 +79,8 @@ pub enum NumericOperator {
     Lte,
     Between,
     NotBetween,
+    IsNull,
+    IsNotNull,
 }
 
 impl NumericOperator {
@@ -92,6 +94,8 @@ impl NumericOperator {
             NumericOperator::Lte => "<=",
             NumericOperator::Between => "BETWEEN",
             NumericOperator::NotBetween => "NOT BETWEEN",
+            NumericOperator::IsNull => "IS NULL",
+            NumericOperator::IsNotNull => "IS NOT NULL",
         }
     }
 }
@@ -121,18 +125,24 @@ where
     T: std::fmt::Display + PartialOrd,
 {
     pub op: NumericOperator,
-    pub from: T,
+    pub from: Option<T>,
     pub to: Option<T>,
 }
 
-pub const NUMERIC_FILTER_MISSING_FROM: &str = "Numeric filter requires 'from' value";
-pub const NUMERIC_FILTER_MISSING_TO: &str = "Numeric filter requires 'to' value";
+const NUMERIC_FILTER_MISSING_FROM: &str = "Numeric filter requires 'from' value";
+const NUMERIC_FILTER_MISSING_TO: &str = "Numeric filter requires 'to' value";
 const NUMERIC_FILTER_TO_LESS_THAN_FROM: &str = "'to' value is less than 'from' value";
 
 pub type DateFilter = NumericFilter<Date>;
 
 impl DateFilter {
-    pub fn new(op: NumericOperator, from: Date, to: Option<Date>) -> DomainResult<Self> {
+    pub fn new(op: NumericOperator, from: Option<Date>, to: Option<Date>) -> DomainResult<Self> {
+        if op != NumericOperator::IsNull && op != NumericOperator::IsNotNull && from.is_none() {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                NUMERIC_FILTER_MISSING_FROM,
+            ));
+        }
         if op == NumericOperator::Between || op == NumericOperator::NotBetween {
             if to.is_none() {
                 return Err(domain_error(
@@ -140,7 +150,7 @@ impl DateFilter {
                     NUMERIC_FILTER_MISSING_TO,
                 ));
             }
-            if to.unwrap() < from {
+            if to.unwrap() < from.unwrap() {
                 return Err(domain_error(
                     DomainErrorKind::Validation,
                     NUMERIC_FILTER_TO_LESS_THAN_FROM,
@@ -153,7 +163,6 @@ impl DateFilter {
     pub fn sql(&self, column: &str) -> String {
         match self.op {
             NumericOperator::Eq
-            | NumericOperator::Ne
             | NumericOperator::Gt
             | NumericOperator::Gte
             | NumericOperator::Lt
@@ -161,16 +170,37 @@ impl DateFilter {
                 format!(
                     "{column} {} '{}'",
                     self.op.sql(),
-                    self.from.format(&DATE_FORMAT).unwrap()
+                    self.from.unwrap().format(&DATE_FORMAT).unwrap()
                 )
             }
-            NumericOperator::Between | NumericOperator::NotBetween => {
+            NumericOperator::Ne => {
+                format!(
+                    "({column} {} '{}' OR {column} IS NULL)",
+                    self.op.sql(),
+                    self.from.unwrap().format(&DATE_FORMAT).unwrap()
+                )
+            }
+            NumericOperator::Between => {
                 format!(
                     "{column} {} '{}' AND '{}'",
                     self.op.sql(),
-                    self.from.format(&DATE_FORMAT).unwrap(),
+                    self.from.unwrap().format(&DATE_FORMAT).unwrap(),
                     self.to.unwrap().format(&DATE_FORMAT).unwrap()
                 )
+            }
+            NumericOperator::NotBetween => {
+                format!(
+                    "({column} {} '{}' AND '{}' OR {column} IS NULL)",
+                    self.op.sql(),
+                    self.from.unwrap().format(&DATE_FORMAT).unwrap(),
+                    self.to.unwrap().format(&DATE_FORMAT).unwrap()
+                )
+            }
+            NumericOperator::IsNull => {
+                format!("{column} IS NULL")
+            }
+            NumericOperator::IsNotNull => {
+                format!("{column} IS NOT NULL")
             }
         }
     }
@@ -221,17 +251,19 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case(NumericOperator::Eq, date!(2025 - 01 - 01), None, "col", "col = '2025-01-01'")]
-    #[case(NumericOperator::Ne, date!(2025 - 01 - 01), None, "col", "col <> '2025-01-01'")]
-    #[case(NumericOperator::Gt, date!(2025 - 01 - 01), None, "col", "col > '2025-01-01'")]
-    #[case(NumericOperator::Gt, date!(2025 - 01 - 01), None, "col", "col > '2025-01-01'")]
-    #[case(NumericOperator::Lt, date!(2025 - 01 - 01), None, "col", "col < '2025-01-01'")]
-    #[case(NumericOperator::Lte, date!(2025- 01 - 01), None, "col", "col <= '2025-01-01'")]
-    #[case(NumericOperator::Between, date!(2025 - 01 - 01), Some(date!(2025 - 01 - 01)), "col", "col BETWEEN '2025-01-01' AND '2025-01-01'")]
-    #[case(NumericOperator::NotBetween, date!(2025 - 01 - 01), Some(date!(2025 - 01 - 31)), "col", "col NOT BETWEEN '2025-01-01' AND '2025-01-31'")]
+    #[case(NumericOperator::Eq, Some(date!(2025 - 01 - 01)), None, "col", "col = '2025-01-01'")]
+    #[case(NumericOperator::Ne, Some(date!(2025 - 01 - 01)), None, "col", "(col <> '2025-01-01' OR col IS NULL)")]
+    #[case(NumericOperator::Gt, Some(date!(2025 - 01 - 01)), None, "col", "col > '2025-01-01'")]
+    #[case(NumericOperator::Gt, Some(date!(2025 - 01 - 01)), None, "col", "col > '2025-01-01'")]
+    #[case(NumericOperator::Lt, Some(date!(2025 - 01 - 01)), None, "col", "col < '2025-01-01'")]
+    #[case(NumericOperator::Lte, Some(date!(2025- 01 - 01)), None, "col", "col <= '2025-01-01'")]
+    #[case(NumericOperator::Between, Some(date!(2025 - 01 - 01)), Some(date!(2025 - 01 - 01)), "col", "col BETWEEN '2025-01-01' AND '2025-01-01'")]
+    #[case(NumericOperator::NotBetween, Some(date!(2025 - 01 - 01)), Some(date!(2025 - 01 - 31)), "col", "(col NOT BETWEEN '2025-01-01' AND '2025-01-31' OR col IS NULL)")]
+    #[case(NumericOperator::IsNull, None, None, "col", "col IS NULL")]
+    #[case(NumericOperator::IsNotNull, None, None, "col", "col IS NOT NULL")]
     fn date_filter_new_ok(
         #[case] op: NumericOperator,
-        #[case] from: Date,
+        #[case] from: Option<Date>,
         #[case] to: Option<Date>,
         #[case] column: &str,
         #[case] expected: &str,
@@ -243,12 +275,12 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case(NumericOperator::Between, date!(2025 - 01 - 01), None, NUMERIC_FILTER_MISSING_TO)]
-    #[case(NumericOperator::NotBetween, date!(2025 - 01 - 01), None, NUMERIC_FILTER_MISSING_TO)]
-    #[case(NumericOperator::Between, date!(2025 - 01 - 01), Some(date!(2024 - 12 - 31)), NUMERIC_FILTER_TO_LESS_THAN_FROM)]
+    #[case(NumericOperator::Between, Some(date!(2025 - 01 - 01)), None, NUMERIC_FILTER_MISSING_TO)]
+    #[case(NumericOperator::NotBetween, Some(date!(2025 - 01 - 01)), None, NUMERIC_FILTER_MISSING_TO)]
+    #[case(NumericOperator::Between, Some(date!(2025 - 01 - 01)), Some(date!(2024 - 12 - 31)), NUMERIC_FILTER_TO_LESS_THAN_FROM)]
     fn date_filter_new_err(
         #[case] op: NumericOperator,
-        #[case] from: Date,
+        #[case] from: Option<Date>,
         #[case] to: Option<Date>,
         #[case] expected: &str,
     ) {

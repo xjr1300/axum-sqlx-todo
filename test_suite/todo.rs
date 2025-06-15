@@ -28,7 +28,7 @@ async fn the_user_can_get_their_own_todo_list() {
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK, "{}", body);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
-    assert_eq!(todos.len(), 6);
+    assert_eq!(todos.len(), 13);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
     let todo = todos
         .iter()
@@ -57,7 +57,7 @@ async fn the_user_can_get_their_own_todo_list() {
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK, "{}", body);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
-    assert_eq!(todos.len(), 6);
+    assert_eq!(todos.len(), 13);
 
     test_case.end().await;
 }
@@ -99,7 +99,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            3,
+            2,
         ),
         (
             TodoListQueryParams {
@@ -108,7 +108,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            2,
+            11,
         ),
         (
             TodoListQueryParams {
@@ -117,7 +117,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            1,
+            5,
         ),
         (
             TodoListQueryParams {
@@ -126,7 +126,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            2,
+            7,
         ),
         (
             TodoListQueryParams {
@@ -135,7 +135,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            4,
+            7,
         ),
         (
             TodoListQueryParams {
@@ -144,7 +144,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            5,
+            8,
         ),
         (
             TodoListQueryParams {
@@ -153,7 +153,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: Some(date!(2025 - 06 - 18)),
                 ..Default::default()
             },
-            2,
+            5,
         ),
         (
             TodoListQueryParams {
@@ -162,19 +162,19 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: Some(date!(2025 - 06 - 18)),
                 ..Default::default()
             },
-            3,
+            7,
         ),
     ];
 
     test_case.login_taro().await;
-    for (body, expected) in cases {
-        let response = test_case.todo_list(Some(body)).await;
+    for (param, expected) in cases {
+        let response = test_case.todo_list(Some(param.clone())).await;
         let ResponseParts {
             status_code, body, ..
         } = split_response(response).await;
         assert_eq!(status_code, StatusCode::OK, "{}", body);
         let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
-        assert_eq!(todos.len(), expected, "{}", body);
+        assert_eq!(todos.len(), expected, "{}", param);
     }
 
     test_case.end().await;
@@ -192,14 +192,14 @@ async fn the_user_can_get_their_own_todo_list_by_todo_statuses() {
                 statuses: Some(vec![1]),
                 ..Default::default()
             },
-            2,
+            6,
         ),
         (
             TodoListQueryParams {
                 statuses: Some(vec![1, 3, 4]),
                 ..Default::default()
             },
-            4,
+            10,
         ),
     ];
 
@@ -593,7 +593,7 @@ async fn user_can_not_update_todo_without_specifying_any_fields() {
 async fn user_can_not_update_if_todo_is_completed_or_archived() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
-    let completed_todo_id = "a61301fa-bb2a-490b-84aa-7dae6c4e086a";
+    let completed_todo_id = "a0c1b2d3-4e5f-6789-abcd-ef0123456789";
     let archived_todo_id = "94904cc3-fff5-44c5-a290-0a6cd54902cd";
 
     test_case.login_taro().await;
@@ -805,6 +805,109 @@ async fn anonymous_user_can_not_access_the_update_todo_endpoint() {
         .send()
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    test_case.end().await;
+}
+
+/// Check that the user can complete a todo.
+#[tokio::test]
+#[ignore]
+async fn user_can_complete_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let not_started_todo_id = "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175";
+    let in_progress_todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
+    let completable_todo_ids = [not_started_todo_id, in_progress_todo_id];
+
+    test_case.login_taro().await;
+    for todo_id in completable_todo_ids {
+        let requested_at = OffsetDateTime::now_utc();
+        let response = test_case.todo_complete(todo_id).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::OK, "{}", body);
+        let todo = serde_json::from_str::<Todo>(&body).unwrap();
+        assert_eq!(todo.status.code, TodoStatusCode::Completed);
+        assert!((todo.completed_at.unwrap() - requested_at).abs() < REQUEST_TIMEOUT);
+    }
+
+    test_case.end().await;
+}
+
+/// Check that the user can not complete a completed or archived todo.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_complete_a_completed_or_archived_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let completed_todo_id = "a61301fa-bb2a-490b-84aa-7dae6c4e086a";
+    let cancelled_todo_id = "b1c2d3e4-5f6a-7890-abcd-ef0123456789";
+    let on_hold_todo_id = "a61301fa-bb2a-490b-84aa-7dae6c4e086a";
+    let archived_todo_id = "94904cc3-fff5-44c5-a290-0a6cd54902cd";
+    let non_completable_todo_ids = [
+        completed_todo_id,
+        cancelled_todo_id,
+        on_hold_todo_id,
+        archived_todo_id,
+    ];
+
+    test_case.login_taro().await;
+    for todo_id in non_completable_todo_ids {
+        let response = test_case.todo_complete(todo_id).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::BAD_REQUEST, "{}", body);
+        assert!(
+            body.contains("Only todos with status 'NotStarted' or 'InProgress'"),
+            "{}",
+            body
+        );
+    }
+
+    test_case.end().await;
+}
+
+/// Check that the user can not complete a todo that belongs to another user.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_complete_a_todo_that_belongs_to_another_user() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let another_user_todo_id = "653acf81-a2e6-43cb-b4b4-9cdb822c740e";
+    let response = test_case.todo_complete(another_user_todo_id).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::FORBIDDEN, "{}", body);
+    assert!(
+        body.contains("You are not authorized to update this todo"),
+        "{}",
+        body
+    );
+
+    test_case.end().await;
+}
+
+// Check that anonymous user can not access the endpoint to complete a todo.
+#[tokio::test]
+#[ignore]
+async fn anonymous_user_can_not_access_the_complete_todo_endpoint() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
+    let todo_id = "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175";
+
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let uri = format!("{}/todos/{}/complete", test_case.origin(), todo_id);
+    let response = client.post(&uri).send().await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     test_case.end().await;

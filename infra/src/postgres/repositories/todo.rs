@@ -4,7 +4,9 @@ use uuid::Uuid;
 
 use domain::{
     DomainError, DomainErrorKind, DomainResult,
-    models::{Role, Todo, TodoId, TodoStatus, User, UserId, primitives::DisplayOrder},
+    models::{
+        Role, Todo, TodoId, TodoStatus, TodoStatusCode, User, UserId, primitives::DisplayOrder,
+    },
     repositories::{TodoCreateInput, TodoListInput, TodoRepository, TodoUpdateInput},
 };
 
@@ -174,10 +176,11 @@ impl TodoRepository for PgTodoRepository {
             WITH updated AS (
                 UPDATE todos
                 SET
+                    todo_status_code = $1,
                     completed_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE
-                    id = $1
+                    id = $2
                 RETURNING
                     id, user_id, title, description, todo_status_code,
                     due_date, completed_at, archived, created_at, updated_at
@@ -197,6 +200,7 @@ impl TodoRepository for PgTodoRepository {
             INNER JOIN roles r ON u.role_code = r.code
             INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
             "#,
+            TodoStatusCode::Completed as i16,
             id.0
         )
         .fetch_optional(&mut *tx)

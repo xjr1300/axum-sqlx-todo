@@ -275,6 +275,11 @@ impl TestCase {
             .await
             .unwrap()
     }
+
+    pub async fn todo_complete(&self, todo_id: &str) -> reqwest::Response {
+        let uri = format!("{}/todos/{}/complete", self.origin(), todo_id);
+        self.http_client.post(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -59,9 +59,7 @@ impl TodoListInput {
                 NUMERIC_FILTER_MISSING_FROM,
             ));
         }
-        let due_date_filter = op
-            .map(|op| DateFilter::new(op, from.unwrap(), to))
-            .transpose()?;
+        let due_date_filter = op.map(|op| DateFilter::new(op, from, to)).transpose()?;
         Ok(Self {
             user_id,
             keyword,

@@ -70,6 +70,7 @@ impl_string_primitive!(TodoStatusName);
 
 /// Todo
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Todo {
     /// ID
     pub id: TodoId,
@@ -184,6 +185,7 @@ impl Todo {
 
 /// Todo状態
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TodoStatus {
     /// Todo状態コード
     pub code: TodoStatusCode,

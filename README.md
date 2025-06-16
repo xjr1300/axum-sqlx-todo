@@ -26,7 +26,7 @@ Todoを管理するWeb APIサービスです。
 APIは、RESTfulな設計にあまり**従っていません**。
 
 また、クエリサービスの機能をリポジトリが担っているため、ドメイン駆動設計に従っていません。
-さらに、データを更新するエンドポイントが、データを帰す場合があるなど、コマンドクエリ分離の原則に**厳密に**従っていません。
+さらに、データを更新するエンドポイントが、データを返す場合があるなど、コマンドクエリ分離の原則に**厳密に**従っていません。
 
 ## Todoについて
 
@@ -77,8 +77,8 @@ Todoは、次の状態で管理されます。
 ```json
 {
     "id": "2bbfea22-0e39-4585-8afa-4256f097731f",
-    "family_name": "山田",
-    "given_name": "太郎",
+    "familyName": "山田",
+    "givenName": "太郎",
     "email": "taro@example.com",
     "role": {
         "code": 2,
@@ -89,9 +89,9 @@ Todoは、次の状態で管理されます。
         "updatedAt": "2025-06-14T02:58:38.77412Z"
     },
     "active": true,
-    "last_login_at": null,
-    "created_at": "2025-06-16T02:15:31.281083Z",
-    "updated_at": "2025-06-16T02:15:31.281083Z"
+    "lastLoginAt": null,
+    "createdAt": "2025-06-16T02:15:31.281083Z",
+    "updatedAt": "2025-06-16T02:15:31.281083Z"
 }
 ```
 
@@ -112,7 +112,7 @@ Todoは、次の状態で管理されます。
 サービスにログインします。
 ログインに成功すると、アクセストークンとリフレッシュトークンをHTTPレスポンスのヘッダに`Set-Cookie`として設定するとともに、レスポンスボディで返します。
 
-- エンドポイント: `/users/login-up`
+- エンドポイント: `/users/login`
 - `Content-Type`: `application/json`
 - メソッド: `POST`
 - リクエストボディ:
@@ -251,8 +251,8 @@ Authorization: Bearer <アクセストークン>
     "id": "4da95cdb-6898-4739-b2be-62ceaa174baf",
     "user": {
       "id": "47125c09-1dea-42b2-a14e-357e59acf3dc",
-      "family_name": "山田",
-      "given_name": "太郎",
+      "familyName": "山田",
+      "givenName": "太郎",
       "email": "taro@example.com",
       "role": {
         "code": 2,
@@ -263,9 +263,9 @@ Authorization: Bearer <アクセストークン>
         "updatedAt": "2025-06-16T04:05:00.68412Z"
       },
       "active": true,
-      "last_login_at": "2025-06-16T04:05:00.77916Z",
-      "created_at": "2025-06-16T04:05:00.757214Z",
-      "updated_at": "2025-06-16T04:05:01.129699Z"
+      "lastLoginAt": "2025-06-16T04:05:00.77916Z",
+      "createdAt": "2025-06-16T04:05:00.757214Z",
+      "updatedAt": "2025-06-16T04:05:01.129699Z"
     },
     "title": "チームミーティング",
     "description": "プロジェクトの進捗確認",
@@ -273,22 +273,22 @@ Authorization: Bearer <アクセストークン>
       "code": 2,
       "name": "進行中",
       "description": "タスクが現在進行中の状態",
-      "display_order": 2,
-      "created_at": "2025-06-16T04:05:00.68412Z",
-      "updated_at": "2025-06-16T04:05:00.68412Z"
+      "displayOrder": 2,
+      "createdAt": "2025-06-16T04:05:00.68412Z",
+      "updatedAt": "2025-06-16T04:05:00.68412Z"
     },
     "due_date": "2025-06-12",
     "completed_at": null,
     "archived": false,
-    "created_at": "2025-06-03T00:30:00Z",
-    "updated_at": "2025-06-10T05:00:00Z"
+    "createdAt": "2025-06-03T00:30:00Z",
+    "updatedAt": "2025-06-10T05:00:00Z"
   },
   {
     "id": "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175",
     "user": {
       "id": "47125c09-1dea-42b2-a14e-357e59acf3dc",
-      "family_name": "山田",
-      "given_name": "太郎",
+      "familyName": "山田",
+      "givenName": "太郎",
       "email": "taro@example.com",
       "role": {
         "code": 2,
@@ -299,9 +299,9 @@ Authorization: Bearer <アクセストークン>
         "updatedAt": "2025-06-16T04:05:00.68412Z"
       },
       "active": true,
-      "last_login_at": "2025-06-16T04:05:00.77916Z",
-      "created_at": "2025-06-16T04:05:00.757214Z",
-      "updated_at": "2025-06-16T04:05:01.129699Z"
+      "lastLoginAt": "2025-06-16T04:05:00.77916Z",
+      "createdAt": "2025-06-16T04:05:00.757214Z",
+      "updatedAt": "2025-06-16T04:05:01.129699Z"
     },
     "title": "レポート提出",
     "description": "月次レポートを作成して提出",
@@ -309,15 +309,15 @@ Authorization: Bearer <アクセストークン>
       "code": 1,
       "name": "未着手",
       "description": "タスクがまだ開始されていない状態",
-      "display_order": 1,
-      "created_at": "2025-06-16T04:05:00.68412Z",
-      "updated_at": "2025-06-16T04:05:00.68412Z"
+      "displayOrder": 1,
+      "createdAt": "2025-06-16T04:05:00.68412Z",
+      "updatedAt": "2025-06-16T04:05:00.68412Z"
     },
     "due_date": "2025-06-12",
     "completed_at": null,
     "archived": false,
-    "created_at": "2025-06-07T21:30:00Z",
-    "updated_at": "2025-06-07T22:00:00Z"
+    "createdAt": "2025-06-07T21:30:00Z",
+    "updatedAt": "2025-06-07T22:00:00Z"
   }
 ]
 ```
@@ -369,8 +369,8 @@ TodoのIDを指定して、Todoを取得します。
     "id": "4da95cdb-6898-4739-b2be-62ceaa174baf",
     "user": {
         "id": "47125c09-1dea-42b2-a14e-357e59acf3dc",
-        "family_name": "山田",
-        "given_name": "太郎",
+        "familyName": "山田",
+        "givenName": "太郎",
         "email": "taro@example.com",
         "role": {
             "code": 2,
@@ -381,9 +381,9 @@ TodoのIDを指定して、Todoを取得します。
             "updatedAt": "2025-06-16T04:05:00.68412Z"
         },
         "active": true,
-        "last_login_at": "2025-06-16T04:05:00.77916Z",
-        "created_at": "2025-06-16T04:05:00.757214Z",
-        "updated_at": "2025-06-16T04:05:01.129699Z"
+        "lastLoginAt": "2025-06-16T04:05:00.77916Z",
+        "createdAt": "2025-06-16T04:05:00.757214Z",
+        "updatedAt": "2025-06-16T04:05:01.129699Z"
     },
     "title": "チームミーティング",
     "description": "プロジェクトの進捗確認",
@@ -391,15 +391,15 @@ TodoのIDを指定して、Todoを取得します。
         "code": 2,
         "name": "進行中",
         "description": "タスクが現在進行中の状態",
-        "display_order": 2,
-        "created_at": "2025-06-16T04:05:00.68412Z",
-        "updated_at": "2025-06-16T04:05:00.68412Z"
+        "displayOrder": 2,
+        "createdAt": "2025-06-16T04:05:00.68412Z",
+        "updatedAt": "2025-06-16T04:05:00.68412Z"
     },
     "due_date": "2025-06-12",
     "completed_at": null,
     "archived": false,
-    "created_at": "2025-06-03T00:30:00Z",
-    "updated_at": "2025-06-10T05:00:00Z"
+    "createdAt": "2025-06-03T00:30:00Z",
+    "updatedAt": "2025-06-10T05:00:00Z"
 }
 ```
 

@@ -173,6 +173,7 @@ pub struct RefreshToken(pub SecretString);
 
 /// ユーザー
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     /// ID
     pub id: UserId,

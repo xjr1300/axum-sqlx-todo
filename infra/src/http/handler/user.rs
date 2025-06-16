@@ -15,7 +15,7 @@ use time::{Duration, OffsetDateTime, serde::rfc3339};
 
 use domain::{
     DomainError, DomainResult,
-    models::{Email, FamilyName, GivenName, RawPassword, User, UserId},
+    models::{Email, FamilyName, GivenName, User, UserId},
     repositories::{
         TokenRepository as _, TokenType, UpdateUserInput, UserInput, UserRepository,
         generate_auth_token_info, generate_auth_token_info_key,
@@ -31,7 +31,7 @@ use crate::{
         handler::user_use_case, internal_server_error, login_failed, unauthorized, user_locked,
     },
     jwt::generate_token_pair,
-    password::{create_hashed_password, verify_password},
+    password::{RawPassword, create_hashed_password, verify_password},
     postgres::repositories::PgUserRepository,
     redis::token::RedisTokenRepository,
     settings::{AppSettings, HttpProtocol},

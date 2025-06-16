@@ -1324,6 +1324,7 @@ dependencies = [
  "deadpool-redis",
  "domain",
  "enum-display",
+ "fancy-regex",
  "hmac",
  "jwt",
  "log",

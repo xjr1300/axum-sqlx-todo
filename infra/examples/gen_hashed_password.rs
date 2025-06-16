@@ -1,7 +1,9 @@
 use secrecy::{ExposeSecret as _, SecretString};
 
-use domain::models::RawPassword;
-use infra::{password::create_hashed_password, settings::load_app_settings};
+use infra::{
+    password::{RawPassword, create_hashed_password},
+    settings::load_app_settings,
+};
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<String>>();

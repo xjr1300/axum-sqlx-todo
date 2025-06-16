@@ -14,6 +14,7 @@ cookie.workspace = true
 deadpool-redis.workspace = true
 domain = { path = "../domain" }
 enum-display.workspace = true
+fancy-regex.workspace = true
 hmac.workspace = true
 jwt.workspace = true
 log.workspace = true

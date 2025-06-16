@@ -62,11 +62,6 @@ pub fn domain_error(kind: DomainErrorKind, message: &'static str) -> DomainError
 /// ドメイン結果
 pub type DomainResult<T> = Result<T, DomainError>;
 
-fn starts_or_ends_with_whitespace(s: &str) -> bool {
-    s.chars().next().is_some_and(|ch| ch.is_whitespace())
-        || s.chars().last().is_some_and(|ch| ch.is_whitespace())
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumDisplay, Deserialize)]
 #[enum_display(case = "Snake")]
 #[serde(rename_all = "snake_case")]
@@ -204,6 +199,12 @@ impl DateFilter {
             }
         }
     }
+}
+
+/// 文字列が空白で始まるか、または空白で終わるかをチェックする。
+pub fn starts_or_ends_with_whitespace(s: &str) -> bool {
+    s.chars().next().is_some_and(|ch| ch.is_whitespace())
+        || s.chars().last().is_some_and(|ch| ch.is_whitespace())
 }
 
 #[cfg(test)]

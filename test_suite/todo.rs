@@ -1227,3 +1227,51 @@ async fn user_can_not_archive_an_archived_todo_or_activate_an_activated_todo() {
 
     test_case.end().await;
 }
+
+/// Check that the user can delete an owned todo.
+#[tokio::test]
+#[ignore]
+async fn user_can_delete_owned_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let todo_id = "4da95cdb-6898-4739-b2be-62ceaa174baf";
+    let response = test_case.todo_delete(todo_id).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::NO_CONTENT, "{}", body);
+
+    // Check that the todo is actually deleted
+    let response = test_case.todo_get_by_id(todo_id).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::NOT_FOUND, "{}", body);
+
+    test_case.end().await;
+}
+
+/// Check That the user can not delete a todo that belongs to another user.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_delete_todo_that_belongs_to_another_user() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let another_user_todo_id = "653acf81-a2e6-43cb-b4b4-9cdb822c740e";
+    let response = test_case.todo_delete(another_user_todo_id).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::FORBIDDEN, "{}", body);
+    assert!(
+        body.contains("You are not authorized to update this todo"),
+        "{}",
+        body
+    );
+
+    test_case.end().await;
+}

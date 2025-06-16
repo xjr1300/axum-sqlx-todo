@@ -302,6 +302,11 @@ impl TestCase {
             .await
             .unwrap()
     }
+
+    pub async fn todo_delete(&self, todo_id: &str) -> reqwest::Response {
+        let uri = format!("{}/todos/{}", self.origin(), todo_id);
+        self.http_client.delete(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -148,6 +148,20 @@ pub async fn archive(
     Ok(Json(reopened_todo))
 }
 
+pub async fn delete(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+    todo_id: Path<Uuid>,
+) -> ApiResult<impl IntoResponse> {
+    let todo_id = TodoId::from(todo_id.0);
+    let use_case = todo_use_case(&app_state);
+    let todo = use_case
+        .delete(auth_user, todo_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok((StatusCode::NO_CONTENT, Json(todo)))
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoListQueryParams {

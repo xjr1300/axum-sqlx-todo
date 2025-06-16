@@ -145,6 +145,12 @@ where
         }
         self.todo_repo.archive(todo_id, archived).await
     }
+
+    pub async fn delete(&self, auth_user: AuthorizedUser, todo_id: TodoId) -> DomainResult<Todo> {
+        let todo = get_authorized_user_own_todo(&self.todo_repo, &auth_user, todo_id).await?;
+        self.todo_repo.delete(todo.id).await?;
+        Ok(todo)
+    }
 }
 
 async fn get_authorized_user_own_todo<TR: TodoRepository>(

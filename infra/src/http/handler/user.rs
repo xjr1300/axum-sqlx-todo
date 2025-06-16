@@ -37,28 +37,6 @@ use crate::{
     settings::{AppSettings, HttpProtocol},
 };
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SignUpRequestBody {
-    pub family_name: String,
-    pub given_name: String,
-    pub email: String,
-    pub password: SecretString,
-}
-
-impl TryFrom<SignUpRequestBody> for UserInput {
-    type Error = DomainError;
-
-    fn try_from(input: SignUpRequestBody) -> DomainResult<Self> {
-        Ok(UserInput {
-            family_name: FamilyName::new(input.family_name)?,
-            given_name: GivenName::new(input.given_name)?,
-            email: Email::new(input.email)?,
-        })
-    }
-}
-
-/// サインアップハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn sign_up(
     State(app_state): State<AppState>,
@@ -79,27 +57,6 @@ pub async fn sign_up(
     Ok(Json(user))
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginRequestBody {
-    email: String,
-    password: SecretString,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginResponseBody {
-    #[serde(serialize_with = "serialize_secret_string")]
-    access_token: SecretString,
-    #[serde(serialize_with = "rfc3339::serialize")]
-    access_expired_at: OffsetDateTime,
-    #[serde(serialize_with = "serialize_secret_string")]
-    refresh_token: SecretString,
-    #[serde(serialize_with = "rfc3339::serialize")]
-    refresh_expired_at: OffsetDateTime,
-}
-
-/// ログインハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn login(
     State(app_state): State<AppState>,
@@ -147,30 +104,6 @@ pub async fn me(
     Ok(Json(user))
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateUserRequestBody {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub family_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub given_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-}
-
-impl TryFrom<UpdateUserRequestBody> for UpdateUserInput {
-    type Error = DomainError;
-
-    fn try_from(input: UpdateUserRequestBody) -> DomainResult<Self> {
-        Ok(UpdateUserInput {
-            family_name: input.family_name.map(FamilyName::new).transpose()?,
-            given_name: input.given_name.map(GivenName::new).transpose()?,
-            email: input.email.map(Email::new).transpose()?,
-        })
-    }
-}
-
-/// ログアウトハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn update(
     State(app_state): State<AppState>,
@@ -186,15 +119,6 @@ pub async fn update(
     Ok(Json(user))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RefreshTokensRequestBody {
-    #[serde(serialize_with = "serialize_secret_string")]
-    #[serde(deserialize_with = "deserialize_secret_string")]
-    pub refresh_token: SecretString,
-}
-
-/// リフレッシュトークンハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn refresh_tokens(
     cookie_jar: CookieJar,
@@ -242,7 +166,6 @@ pub async fn refresh_tokens(
     generate_tokens_response(settings, user_repo, token_repo, user.id, requested_at).await
 }
 
-/// ログアウトハンドラ
 #[tracing::instrument(skip(app_state))]
 pub async fn logout(
     State(app_state): State<AppState>,
@@ -291,6 +214,78 @@ pub async fn logout(
             .unwrap(),
     );
     Ok(response)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignUpRequestBody {
+    pub family_name: String,
+    pub given_name: String,
+    pub email: String,
+    pub password: SecretString,
+}
+
+impl TryFrom<SignUpRequestBody> for UserInput {
+    type Error = DomainError;
+
+    fn try_from(input: SignUpRequestBody) -> DomainResult<Self> {
+        Ok(UserInput {
+            family_name: FamilyName::new(input.family_name)?,
+            given_name: GivenName::new(input.given_name)?,
+            email: Email::new(input.email)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginRequestBody {
+    email: String,
+    password: SecretString,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginResponseBody {
+    #[serde(serialize_with = "serialize_secret_string")]
+    access_token: SecretString,
+    #[serde(serialize_with = "rfc3339::serialize")]
+    access_expired_at: OffsetDateTime,
+    #[serde(serialize_with = "serialize_secret_string")]
+    refresh_token: SecretString,
+    #[serde(serialize_with = "rfc3339::serialize")]
+    refresh_expired_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub given_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}
+
+impl TryFrom<UpdateUserRequestBody> for UpdateUserInput {
+    type Error = DomainError;
+
+    fn try_from(input: UpdateUserRequestBody) -> DomainResult<Self> {
+        Ok(UpdateUserInput {
+            family_name: input.family_name.map(FamilyName::new).transpose()?,
+            given_name: input.given_name.map(GivenName::new).transpose()?,
+            email: input.email.map(Email::new).transpose()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshTokensRequestBody {
+    #[serde(serialize_with = "serialize_secret_string")]
+    #[serde(deserialize_with = "deserialize_secret_string")]
+    pub refresh_token: SecretString,
 }
 
 async fn generate_tokens_response(

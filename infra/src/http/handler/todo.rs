@@ -57,6 +57,7 @@ pub async fn list(
     Ok(Json(todos))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn by_id(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -74,6 +75,7 @@ pub async fn by_id(
     }
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn create(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -88,6 +90,7 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(todo)))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn update(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -104,6 +107,7 @@ pub async fn update(
     Ok(Json(updated_todo))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn complete(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -118,6 +122,7 @@ pub async fn complete(
     Ok(Json(completed_todo))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn reopen(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -133,6 +138,7 @@ pub async fn reopen(
     Ok(Json(reopened_todo))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn archive(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,
@@ -148,6 +154,7 @@ pub async fn archive(
     Ok(Json(reopened_todo))
 }
 
+#[tracing::instrument(skip(app_state))]
 pub async fn delete(
     State(app_state): State<AppState>,
     Extension(auth_user): Extension<AuthorizedUser>,

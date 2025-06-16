@@ -280,6 +280,17 @@ impl TestCase {
         let uri = format!("{}/todos/{}/complete", self.origin(), todo_id);
         self.http_client.post(&uri).send().await.unwrap()
     }
+
+    pub async fn todo_reopen(&self, todo_id: &str, body: String) -> reqwest::Response {
+        let uri = format!("{}/todos/{}/reopen", self.origin(), todo_id);
+        self.http_client
+            .post(&uri)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+            .unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

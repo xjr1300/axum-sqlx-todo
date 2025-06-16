@@ -1,4 +1,3 @@
-use axum::http::HeaderMap;
 use reqwest::StatusCode;
 use time::{
     OffsetDateTime,
@@ -28,7 +27,7 @@ async fn the_user_can_get_their_own_todo_list() {
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK, "{}", body);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
-    assert_eq!(todos.len(), 13);
+    assert_eq!(todos.len(), 14);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
     let todo = todos
         .iter()
@@ -57,7 +56,7 @@ async fn the_user_can_get_their_own_todo_list() {
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::OK, "{}", body);
     let todos = serde_json::from_str::<Vec<Todo>>(&body).unwrap();
-    assert_eq!(todos.len(), 13);
+    assert_eq!(todos.len(), 14);
 
     test_case.end().await;
 }
@@ -108,7 +107,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            11,
+            12,
         ),
         (
             TodoListQueryParams {
@@ -117,7 +116,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            5,
+            6,
         ),
         (
             TodoListQueryParams {
@@ -126,7 +125,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: None,
                 ..Default::default()
             },
-            7,
+            8,
         ),
         (
             TodoListQueryParams {
@@ -162,7 +161,7 @@ async fn the_user_can_get_their_own_todo_list_by_due_date() {
                 to: Some(date!(2025 - 06 - 18)),
                 ..Default::default()
             },
-            7,
+            8,
         ),
     ];
 
@@ -199,7 +198,7 @@ async fn the_user_can_get_their_own_todo_list_by_todo_statuses() {
                 statuses: Some(vec![1, 3, 4]),
                 ..Default::default()
             },
-            10,
+            11,
         ),
     ];
 
@@ -235,7 +234,7 @@ async fn the_user_can_get_their_own_todo_list_by_archived() {
                 archived: Some(true),
                 ..Default::default()
             },
-            1,
+            2,
         ),
     ];
 
@@ -429,12 +428,10 @@ async fn anonymous_user_can_not_access_the_create_todo_endpoint() {
             }
             "#,
     );
-    let mut headers = HeaderMap::new();
-    headers.insert("Content-Type", "application/json".parse().unwrap());
     let uri = format!("{}/todos", test_case.origin());
     let response = client
         .post(&uri)
-        .headers(headers)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(request_body)
         .send()
         .await
@@ -831,12 +828,10 @@ async fn anonymous_user_can_not_access_the_update_todo_endpoint() {
         "#,
         TodoStatusCode::NotStarted as i16
     );
-    let mut headers = HeaderMap::new();
-    headers.insert("Content-Type", "application/json".parse().unwrap());
     let uri = format!("{}/todos/{}", test_case.origin(), todo_id);
     let response = client
         .patch(&uri)
-        .headers(headers)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(request_body)
         .send()
         .await
@@ -929,7 +924,7 @@ async fn user_can_not_complete_a_todo_that_belongs_to_another_user() {
     test_case.end().await;
 }
 
-// Check that anonymous user can not access the endpoint to complete a todo.
+/// Check that anonymous user can not access the endpoint to complete a todo.
 #[tokio::test]
 #[ignore]
 async fn anonymous_user_can_not_access_the_complete_todo_endpoint() {
@@ -944,6 +939,198 @@ async fn anonymous_user_can_not_access_the_complete_todo_endpoint() {
         .unwrap();
     let uri = format!("{}/todos/{}/complete", test_case.origin(), todo_id);
     let response = client.post(&uri).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    test_case.end().await;
+}
+
+/// Check that the user can reopen a todo that was previously completed.
+#[tokio::test]
+#[ignore]
+async fn user_can_reopen_a_completed_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let completed_todo_id = "a0c1b2d3-4e5f-6789-abcd-ef0123456789";
+
+    test_case.login_taro().await;
+    let requested_at = OffsetDateTime::now_utc();
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 1
+        }
+        "#,
+    );
+    let response = test_case.todo_reopen(completed_todo_id, request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::OK, "{}", body);
+    let todo = serde_json::from_str::<Todo>(&body).unwrap();
+    assert_eq!(todo.status.code, TodoStatusCode::NotStarted);
+    assert_eq!(todo.completed_at, None);
+    assert!((todo.updated_at - requested_at).abs() < REQUEST_TIMEOUT);
+
+    test_case.end().await;
+}
+
+/// Check that the user can not reopen a todo that was not previously completed.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_reopen_a_todo_that_was_not_completed() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let uncompleted_todo_ids = [
+        "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175", // Not started
+        "4da95cdb-6898-4739-b2be-62ceaa174baf", // In progress
+        "b1c2d3e4-5f6a-7890-abcd-ef0123456789", // Cancelled
+        "a61301fa-bb2a-490b-84aa-7dae6c4e086a", // On hold
+    ];
+
+    test_case.login_taro().await;
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 1
+        }
+        "#,
+    );
+    for todo_id in uncompleted_todo_ids {
+        let response = test_case.todo_reopen(todo_id, request_body.clone()).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::BAD_REQUEST, "{}", body);
+        assert!(
+            body.contains("Only completed todos can be reopened"),
+            "{}",
+            body
+        );
+    }
+
+    test_case.end().await;
+}
+
+/// Check that the user can not reopen an archived todo.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_reopen_an_archived_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let archived_todo_id = "6459a7ba-5b05-412d-8a39-64a7740f4b7a";
+
+    test_case.login_taro().await;
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 1
+        }
+        "#,
+    );
+    let response = test_case.todo_reopen(archived_todo_id, request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::BAD_REQUEST, "{}", body);
+    assert!(
+        body.contains("Archived todos cannot be reopened"),
+        "{}",
+        body
+    );
+
+    test_case.end().await;
+}
+
+/// Check that the user can not reopen a todo with a completed status code.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_reopen_a_todo_with_completed_status_code() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let completed_todo_id = "a0c1b2d3-4e5f-6789-abcd-ef0123456789";
+
+    test_case.login_taro().await;
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 3
+        }
+        "#,
+    );
+    let response = test_case.todo_reopen(completed_todo_id, request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::BAD_REQUEST, "{}", body);
+    assert!(
+        body.contains("Cannot reopen a todo with status 'Completed'"),
+        "{}",
+        body
+    );
+
+    test_case.end().await;
+}
+
+/// Check that the user can not reopen a todo that belongs to another user.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_reopen_a_todo_that_belongs_to_another_user() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+
+    test_case.login_taro().await;
+    let another_user_todo_id = "7e4c5d0e-3213-4063-abfc-ba833add774b";
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 1
+        }
+        "#,
+    );
+    let response = test_case
+        .todo_reopen(another_user_todo_id, request_body)
+        .await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::FORBIDDEN, "{}", body);
+    assert!(
+        body.contains("You are not authorized to update this todo"),
+        "{}",
+        body
+    );
+
+    test_case.end().await;
+}
+
+/// Check that anonymous user can not access the endpoint to reopen a todo.
+#[tokio::test]
+#[ignore]
+async fn anonymous_user_can_not_access_to_reopen_todo_endpoint() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
+    let todo_id = "a0c1b2d3-4e5f-6789-abcd-ef0123456789";
+
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let request_body = String::from(
+        r#"
+        {
+            "todoStatusCode": 1
+        }
+        "#,
+    );
+    let uri = format!("{}/todos/{}/reopen", test_case.origin(), todo_id);
+    let response = client
+        .post(&uri)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     test_case.end().await;

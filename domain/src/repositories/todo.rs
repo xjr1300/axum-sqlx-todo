@@ -26,6 +26,9 @@ pub trait TodoRepository {
     /// Todoを完了する。
     async fn complete(&self, id: TodoId) -> DomainResult<Todo>;
 
+    /// 完了状態のTodoを他の状態に変更する。
+    async fn reopen(&self, id: TodoId, status: TodoStatusCode) -> DomainResult<Todo>;
+
     /// Todoをアーカイブする。
     async fn archive(&self, id: TodoId, archived: bool) -> DomainResult<Todo>;
 

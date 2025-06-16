@@ -90,6 +90,38 @@ where
         }
         self.todo_repo.complete(todo_id).await
     }
+
+    pub async fn reopen(
+        &self,
+        auth_user: AuthorizedUser,
+        todo_id: TodoId,
+        status: TodoStatusCode,
+    ) -> DomainResult<Todo> {
+        // 再オープンするときの状態が完了済み出ないことを確認
+        if status == TodoStatusCode::Completed {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Cannot reopen a todo with status 'Completed'",
+            ));
+        }
+        // Todoを取得して、認証されたユーザーが所有するTodoが確認
+        let todo = get_authorized_user_own_todo(&self.todo_repo, &auth_user, todo_id).await?;
+        // Todoの状態が完了済みであることを確認
+        if todo.status.code != TodoStatusCode::Completed {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Only completed todos can be reopened",
+            ));
+        }
+        // Todoがアーカイブされていないことを確認
+        if todo.archived {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Archived todos cannot be reopened",
+            ));
+        }
+        self.todo_repo.reopen(todo_id, status).await
+    }
 }
 
 async fn get_authorized_user_own_todo<TR: TodoRepository>(

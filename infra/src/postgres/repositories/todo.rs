@@ -212,6 +212,51 @@ impl TodoRepository for PgTodoRepository {
         }
     }
 
+    /// 完了状態のTodoを他の状態に変更する。
+    async fn reopen(&self, id: TodoId, status: TodoStatusCode) -> DomainResult<Todo> {
+        let mut tx = self.begin().await?;
+        let row = sqlx::query_as!(
+            TodoRow,
+            r#"
+            WITH updated AS (
+                UPDATE todos
+                SET
+                    todo_status_code = $1,
+                    completed_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE
+                    id = $2
+                RETURNING
+                    id, user_id, title, description, todo_status_code,
+                    due_date, completed_at, archived, created_at, updated_at
+            )
+            SELECT
+                t.id, t.user_id,
+                u.family_name, u.given_name, u.email,
+                u.role_code, r.name role_name, r.description role_description,r.display_order role_display_order,
+                r.created_at role_created_at, r.updated_at role_updated_at,
+                u.active, u.last_login_at, u.created_at user_created_at, u.updated_at user_updated_at,
+                t.title, t.description,
+                t.todo_status_code, ts.name todo_status_name, ts.description todo_status_description,
+                ts.display_order todo_status_display_order, ts.created_at todo_status_created_at, ts.updated_at todo_status_updated_at,
+                t.due_date, t.completed_at, t.archived, t.created_at, t.updated_at
+            FROM updated t
+            INNER JOIN users u ON t.user_id = u.id
+            INNER JOIN roles r ON u.role_code = r.code
+            INNER JOIN todo_statuses ts ON t.todo_status_code = ts.code
+            "#,
+            status as i16,
+            id.0
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(repository_error)?;
+        match row {
+            Some(row) => todo_commit(tx, row).await,
+            None => todo_not_found(id),
+        }
+    }
+
     /// Todoをアーカイブする。
     async fn archive(&self, id: TodoId, archived: bool) -> DomainResult<Todo> {
         let mut tx = self.begin().await?;

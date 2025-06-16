@@ -7,6 +7,7 @@ edition = "2024"
 anyhow.workspace = true
 async-trait.workspace = true
 enum-display.workspace = true
+fancy-regex.workspace = true
 garde.workspace = true
 secrecy.workspace = true
 serde.workspace = true

@@ -41,7 +41,7 @@ use crate::{
 pub async fn sign_up(
     State(app_state): State<AppState>,
     Json(body): Json<SignUpRequestBody>,
-) -> ApiResult<Json<User>> {
+) -> ApiResult<impl IntoResponse> {
     // パスワードの検証とハッシュ化
     let raw_password = RawPassword::new(body.password.clone()).map_err(ApiError::from)?;
     let hashed_password = create_hashed_password(&app_state.app_settings.password, &raw_password)
@@ -54,7 +54,7 @@ pub async fn sign_up(
         .sign_up(input, hashed_password)
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(user))
+    Ok((StatusCode::CREATED, Json(user)))
 }
 
 #[tracing::instrument(skip(app_state))]
@@ -170,7 +170,7 @@ pub async fn refresh_tokens(
 pub async fn logout(
     State(app_state): State<AppState>,
     Extension(user): Extension<AuthorizedUser>,
-) -> ApiResult<Response<Body>> {
+) -> ApiResult<impl IntoResponse> {
     // ユーザーリポジトリからユーザーのハッシュ化されたアクセストークンとリフレッシュトークンを削除
     let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
     let token_keys = user_repo
@@ -213,7 +213,7 @@ pub async fn logout(
             .parse::<HeaderValue>()
             .unwrap(),
     );
-    Ok(response)
+    Ok((StatusCode::NO_CONTENT, response))
 }
 
 #[derive(Debug, Clone, Deserialize)]

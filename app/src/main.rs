@@ -13,11 +13,7 @@ async fn main() -> anyhow::Result<()> {
     // アプリケーション設定を読み込み
     let mut app_settings = load_app_settings("app_settings.toml")?;
 
-    let subscriber = get_subscriber(
-        "axum-sqlx-todo".into(),
-        app_settings.log_level,
-        std::io::stdout,
-    );
+    let subscriber = get_subscriber("rusty-todo".into(), app_settings.log_level, std::io::stdout);
     init_subscriber(subscriber);
     tracing::info!("{:?}", app_settings);
 

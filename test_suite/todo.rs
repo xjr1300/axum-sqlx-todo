@@ -1135,3 +1135,95 @@ async fn anonymous_user_can_not_access_to_reopen_todo_endpoint() {
 
     test_case.end().await;
 }
+
+/// Check that the user can archive a todo that was not archived.
+#[tokio::test]
+#[ignore]
+async fn user_can_archive_a_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let todo_id = "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175";
+
+    test_case.login_taro().await;
+    let requested_at = OffsetDateTime::now_utc();
+    let request_body = String::from(
+        r#"
+        {
+            "archived": true
+        }
+        "#,
+    );
+    let response = test_case.todo_archive(todo_id, request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::OK, "{}", body);
+    let todo = serde_json::from_str::<Todo>(&body).unwrap();
+    assert!(todo.archived);
+    assert!((todo.updated_at - requested_at).abs() < REQUEST_TIMEOUT);
+
+    test_case.end().await;
+}
+
+/// Check that the user can activate a previously archived todo
+#[tokio::test]
+#[ignore]
+async fn user_can_activate_a_previously_archived_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let todo_id = "6459a7ba-5b05-412d-8a39-64a7740f4b7a";
+
+    test_case.login_taro().await;
+    let requested_at = OffsetDateTime::now_utc();
+    let request_body = String::from(
+        r#"
+        {
+            "archived": false
+        }
+        "#,
+    );
+    let response = test_case.todo_archive(todo_id, request_body).await;
+    let ResponseParts {
+        status_code, body, ..
+    } = split_response(response).await;
+    assert_eq!(status_code, StatusCode::OK, "{}", body);
+    let todo = serde_json::from_str::<Todo>(&body).unwrap();
+    assert!(!todo.archived);
+    assert!((todo.updated_at - requested_at).abs() < REQUEST_TIMEOUT);
+
+    test_case.end().await;
+}
+
+/// Check that the user can not archive an archived todo, and can not activate an activated todo.
+#[tokio::test]
+#[ignore]
+async fn user_can_not_archive_an_archived_todo_or_activate_an_activated_todo() {
+    let app_settings = load_app_settings_for_testing();
+    let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
+    let archived_todo_id = "6459a7ba-5b05-412d-8a39-64a7740f4b7a";
+    let active_todo_id = "ee0f5a08-87c3-48d9-81b0-3f3e7bd8c175";
+    let cases = [
+        (archived_todo_id, true, "Todo is already archived"),
+        (active_todo_id, false, "Todo is not archived"),
+    ];
+
+    test_case.login_taro().await;
+    for (todo_id, archived, message) in cases {
+        let request_body = format!(
+            r#"
+            {{
+                "archived": {}
+            }}
+            "#,
+            archived
+        );
+        let response = test_case.todo_archive(todo_id, request_body).await;
+        let ResponseParts {
+            status_code, body, ..
+        } = split_response(response).await;
+        assert_eq!(status_code, StatusCode::BAD_REQUEST, "{}", body);
+        assert!(body.contains(message), "{}", body);
+    }
+
+    test_case.end().await;
+}

@@ -133,6 +133,21 @@ pub async fn reopen(
     Ok(Json(reopened_todo))
 }
 
+pub async fn archive(
+    State(app_state): State<AppState>,
+    Extension(auth_user): Extension<AuthorizedUser>,
+    todo_id: Path<Uuid>,
+    Json(body): Json<TodoArchiveRequestBody>,
+) -> ApiResult<Json<Todo>> {
+    let todo_id = TodoId::from(todo_id.0);
+    let use_case = todo_use_case(&app_state);
+    let reopened_todo = use_case
+        .archive(auth_user, todo_id, body.archived)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(reopened_todo))
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoListQueryParams {
@@ -251,4 +266,9 @@ impl TryFrom<TodoUpdateRequestBody> for TodoUpdateInput {
 #[serde(rename_all = "camelCase")]
 pub struct TodoReopenRequestBody {
     pub todo_status_code: TodoStatusCode,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TodoArchiveRequestBody {
+    pub archived: bool,
 }

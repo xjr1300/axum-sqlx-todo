@@ -122,6 +122,29 @@ where
         }
         self.todo_repo.reopen(todo_id, status).await
     }
+
+    pub async fn archive(
+        &self,
+        auth_user: AuthorizedUser,
+        todo_id: TodoId,
+        archived: bool,
+    ) -> DomainResult<Todo> {
+        // Todoを取得して、認証されたユーザーが所有するTodoが確認
+        let todo = get_authorized_user_own_todo(&self.todo_repo, &auth_user, todo_id).await?;
+        // アーカイブする場合は、Todoがアーカイブ済みでないこと、アーカイブを解除する場合はTodoがアーカイブ済みであることを確認
+        if archived && todo.archived {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Todo is already archived",
+            ));
+        } else if !archived && !todo.archived {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "Todo is not archived",
+            ));
+        }
+        self.todo_repo.archive(todo_id, archived).await
+    }
 }
 
 async fn get_authorized_user_own_todo<TR: TodoRepository>(

@@ -176,13 +176,6 @@ impl Todo {
                     "completed_at must be greater than or equal to created_at",
                 ));
             }
-            // 完了日時と更新日時が一致しなくてはならない。
-            if completed_at != self.updated_at {
-                return Err(domain_error(
-                    DomainErrorKind::Validation,
-                    "completed_at must be equal to updated_at",
-                ));
-            }
         }
 
         Ok(())

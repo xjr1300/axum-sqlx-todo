@@ -291,6 +291,17 @@ impl TestCase {
             .await
             .unwrap()
     }
+
+    pub async fn todo_archive(&self, todo_id: &str, body: String) -> reqwest::Response {
+        let uri = format!("{}/todos/{}/archive", self.origin(), todo_id);
+        self.http_client
+            .post(&uri)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+            .unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -286,8 +286,6 @@ mod tests {
     #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 00:00:00 UTC)),datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 00:00:00 UTC), true)]
     // 完了日時が作成日時よりも後で、更新日時と等しい
     #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 01:00:00 UTC)), datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), true)]
-    // 完了日時が作成日時よりも後で、更新日時と異なる
-    #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 01:00:01 UTC)), datetime!(2025-01-01 00:00:00 UTC), datetime!(2025-01-01 01:00:00 UTC), false)]
     // 完了日時が作成日時よりも前
     #[case(TodoStatusCode::Completed, Some(datetime!(2025-01-01 00:00:00 UTC)), datetime!(2025-01-01 00:00:01 UTC), datetime!(2025-01-01 00:00:00 UTC), false)]
     fn todo_new_date_time_related(

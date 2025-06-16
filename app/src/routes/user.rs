@@ -1,6 +1,6 @@
 use axum::{
     Router, middleware,
-    routing::{get, patch, post},
+    routing::{get, post},
 };
 
 use infra::{
@@ -18,8 +18,7 @@ pub fn create_user_routes(app_state: AppState) -> Router<AppState> {
         .route("/refresh-tokens", post(refresh_tokens))
         .with_state(app_state.clone());
     let protected_router = Router::new()
-        .route("/me", get(me))
-        .route("/me", patch(update))
+        .route("/me", get(me).patch(update))
         .route("/logout", post(logout))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),

@@ -81,6 +81,16 @@ pub struct DatabaseSettings {
 /// パスワード設定
 #[derive(Debug, Clone, Deserialize)]
 pub struct PasswordSettings {
+    /// パスワードの最小文字数
+    pub min_length: usize,
+    /// パスワードの最大文字数
+    pub max_length: usize,
+    /// パスワードに使用可能な記号の候補
+    pub symbols: String,
+    /// パスワードに同じ文字を含めることができる文字数
+    pub max_same_chars: u64,
+    /// パスワードに同じ文字が連続して続く文字数
+    pub max_repeated_chars: u8,
     /// ペッパー
     pub pepper: SecretString,
     /// パスワードをハッシュ化するときのメモリサイズ

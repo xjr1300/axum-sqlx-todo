@@ -13,23 +13,12 @@ use domain::{
 
 use crate::settings::PasswordSettings;
 
-/// パスワード最小文字数
-pub const PASSWORD_MIN_LENGTH: usize = 8;
-/// パスワード最大文字数
-pub const PASSWORD_MAX_LENGTH: usize = 32;
-/// パスワードに含めるシンボルの候補
-const PASSWORD_SYMBOLS_CANDIDATES: &str = r#"~!@#$%^&*()_-+={[}]|\:;"'<,>.?/"#;
-/// パスワードに同じ文字を含められる文字数
-const PASSWORD_MAX_NUMBER_OF_SAME_CHAR: u64 = 3;
-/// パスワードに同じ文字が連続して出現できる最大回数
-const PASSWORD_MAX_REPEATING_CHARS: u8 = 2;
-
 /// 未加工のパスワード
 #[derive(Debug, Clone)]
 pub struct RawPassword(pub SecretString);
 
 impl RawPassword {
-    pub fn new(value: SecretString) -> DomainResult<Self> {
+    pub fn new(settings: &PasswordSettings, value: SecretString) -> DomainResult<Self> {
         // 文字列の前後の空白をトリム
         let value = value.expose_secret();
         let value = if starts_or_ends_with_whitespace(value) {
@@ -38,10 +27,10 @@ impl RawPassword {
             value.to_string()
         };
         // パスワードの長さを確認
-        if value.is_empty() || !(PASSWORD_MIN_LENGTH..=PASSWORD_MAX_LENGTH).contains(&value.len()) {
+        if value.is_empty() || !(settings.min_length..=settings.max_length).contains(&value.len()) {
             let message = format!(
                 "The password length must be between {} and {} characters",
-                PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH
+                settings.min_length, settings.max_length
             );
             return Err(DomainError {
                 kind: DomainErrorKind::Validation,
@@ -71,14 +60,8 @@ impl RawPassword {
             ));
         }
         // シンボルが含まれるか確認
-        if !value
-            .chars()
-            .any(|ch| PASSWORD_SYMBOLS_CANDIDATES.contains(ch))
-        {
-            let message = format!(
-                "The password must contain a symbol({})",
-                PASSWORD_SYMBOLS_CANDIDATES
-            );
+        if !value.chars().any(|ch| settings.symbols.contains(ch)) {
+            let message = format!("The password must contain a symbol({})", settings.symbols);
             return Err(DomainError {
                 kind: DomainErrorKind::Validation,
                 messages: vec![message.clone().into()],
@@ -91,10 +74,10 @@ impl RawPassword {
             *number_of_chars.entry(ch).or_insert(0) += 1;
         });
         let max_number_of_appearances = number_of_chars.values().max().unwrap();
-        if PASSWORD_MAX_NUMBER_OF_SAME_CHAR < *max_number_of_appearances {
+        if settings.max_same_chars < *max_number_of_appearances {
             let message = format!(
                 "Passwords can't contain more than {} identical characters",
-                PASSWORD_MAX_NUMBER_OF_SAME_CHAR
+                settings.max_same_chars
             );
             return Err(DomainError {
                 kind: DomainErrorKind::Validation,
@@ -103,7 +86,7 @@ impl RawPassword {
             });
         }
         // 文字が連続して出現する回数を確認
-        if has_repeating_chars(&value, PASSWORD_MAX_REPEATING_CHARS + 1) {
+        if has_repeating_chars(&value, settings.max_repeated_chars + 1) {
             return Err(domain_error(
                 DomainErrorKind::Validation,
                 "The password can't contain the same character repeated more than twice",
@@ -226,12 +209,27 @@ fn has_repeating_chars(s: &str, max_repeats: u8) -> bool {
 mod tests {
     use super::*;
 
+    fn password_settings() -> PasswordSettings {
+        PasswordSettings {
+            min_length: 8,
+            max_length: 32,
+            symbols: "~!@#$%^&*()_-+={[}]|:;'<,>.?/".into(),
+            max_same_chars: 3,
+            max_repeated_chars: 2,
+            pepper: SecretString::new("abcdefg".into()),
+            hash_memory: 12288,
+            hash_iterations: 3,
+            hash_parallelism: 1,
+        }
+    }
+
     #[rstest::rstest]
     #[case("Valid1@Password", "Valid1@Password")]
     #[case(" Valid1@Password", "Valid1@Password")]
     #[case("Valid1@Password ", "Valid1@Password")]
     fn test_raw_password_ok(#[case] password: &str, #[case] expected: &str) -> anyhow::Result<()> {
-        let raw_password = RawPassword::new(SecretString::new(password.into()))?;
+        let settings = password_settings();
+        let raw_password = RawPassword::new(&settings, SecretString::new(password.into()))?;
         assert_eq!(raw_password.0.expose_secret(), expected);
         Ok(())
     }
@@ -245,7 +243,8 @@ mod tests {
     #[case("Valid12Password", "symbol")]
     #[case("Valid1@Passwordss", "identical")]
     fn test_raw_password_fail(#[case] password: &str, #[case] message: &str) -> anyhow::Result<()> {
-        let result = RawPassword::new(SecretString::new(password.into()));
+        let settings = password_settings();
+        let result = RawPassword::new(&settings, SecretString::new(password.into()));
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(e.to_string().contains(message));
@@ -266,8 +265,9 @@ mod tests {
     #[case("abbb", true)]
     #[case("abbba", true)]
     fn test_has_repeating_chars(#[case] s: &str, #[case] expected: bool) {
+        let settings = password_settings();
         assert_eq!(
-            has_repeating_chars(s, PASSWORD_MAX_REPEATING_CHARS + 1),
+            has_repeating_chars(s, settings.max_repeated_chars + 1),
             expected
         );
     }
@@ -291,6 +291,11 @@ mod tests {
     #[test]
     fn test_create_hashed_password_and_verify() -> anyhow::Result<()> {
         let settings = PasswordSettings {
+            min_length: 8,
+            max_length: 32,
+            symbols: r#"~!@#$%^&*()_-+={[}]|:;'<,>.?/"#.into(),
+            max_same_chars: 3,
+            max_repeated_chars: 2,
             pepper: SecretString::new("abcdefg".into()),
             hash_memory: 12288,
             hash_iterations: 3,

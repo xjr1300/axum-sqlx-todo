@@ -43,7 +43,8 @@ pub async fn sign_up(
     Json(body): Json<SignUpRequestBody>,
 ) -> ApiResult<impl IntoResponse> {
     // パスワードの検証とハッシュ化
-    let raw_password = RawPassword::new(body.password.clone()).map_err(ApiError::from)?;
+    let raw_password = RawPassword::new(&app_state.app_settings.password, body.password.clone())
+        .map_err(ApiError::from)?;
     let hashed_password = create_hashed_password(&app_state.app_settings.password, &raw_password)
         .map_err(ApiError::from)?;
     // リクエストボディをUserInputに変換
@@ -83,7 +84,8 @@ pub async fn login(
         .await
         .map_err(internal_server_error)?;
     // ユーザーのパスワードを検証
-    let raw_password = RawPassword::new(body.password).map_err(|_| login_failed())?;
+    let raw_password = RawPassword::new(&app_state.app_settings.password, body.password)
+        .map_err(|_| login_failed())?;
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {

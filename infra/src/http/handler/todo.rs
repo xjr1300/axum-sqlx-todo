@@ -162,11 +162,11 @@ pub async fn delete(
 ) -> ApiResult<impl IntoResponse> {
     let todo_id = TodoId::from(todo_id.0);
     let use_case = todo_use_case(&app_state);
-    let todo = use_case
+    let _ = use_case
         .delete(auth_user, todo_id)
         .await
         .map_err(ApiError::from)?;
-    Ok((StatusCode::NO_CONTENT, Json(todo)))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

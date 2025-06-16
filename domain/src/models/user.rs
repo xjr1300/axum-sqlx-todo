@@ -38,9 +38,11 @@ pub const PASSWORD_MIN_LENGTH: usize = 8;
 /// パスワード最大文字数
 pub const PASSWORD_MAX_LENGTH: usize = 32;
 /// パスワードに含めるシンボルの候補
-const PASSWORD_SYMBOLS_CANDIDATES: &str = r#"~`!@#$%^&*()_-+={[}]|\:;"'<,>.?/"#;
+const PASSWORD_SYMBOLS_CANDIDATES: &str = r#"~!@#$%^&*()_-+={[}]|\:;"'<,>.?/"#;
 /// パスワードに同じ文字を含められる文字数
 const PASSWORD_MAX_NUMBER_OF_SAME_CHAR: u64 = 3;
+/// パスワードに同じ文字が連続して出現できる最大回数
+const PASSWORD_MAX_REPEATING_CHARS: u8 = 2;
 
 /// 未加工のパスワード
 #[derive(Debug, Clone)]
@@ -136,6 +138,13 @@ impl RawPassword {
                 messages: vec![message.clone().into()],
                 source: anyhow::anyhow!(message),
             });
+        }
+        // 文字が連続して出現する回数を確認
+        if has_repeating_chars(&value, PASSWORD_MAX_REPEATING_CHARS + 1) {
+            return Err(domain_error(
+                DomainErrorKind::Validation,
+                "The password can't contain the same character repeated more than twice",
+            ));
         }
         Ok(Self(SecretString::new(value.into())))
     }
@@ -259,6 +268,14 @@ pub struct Role {
     pub updated_at: OffsetDateTime,
 }
 
+/// 同じ文字が指定された数以上連続して出現するかどうかを確認する。
+fn has_repeating_chars(s: &str, max_repeats: u8) -> bool {
+    use fancy_regex::Regex;
+    let max_repeats = max_repeats - 1;
+    let re = Regex::new(&format!(r"(\w)\1{{{},}}", max_repeats)).unwrap();
+    re.is_match(s).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +307,22 @@ mod tests {
             panic!("Expected DomainError::Validation");
         }
         Ok(())
+    }
+
+    #[rstest::rstest]
+    #[case("a", false)]
+    #[case("aa", false)]
+    #[case("aab", false)]
+    #[case("baa", false)]
+    #[case("baab", false)]
+    #[case("aaa", true)]
+    #[case("aaab", true)]
+    #[case("abbb", true)]
+    #[case("abbba", true)]
+    fn test_has_repeating_chars(#[case] s: &str, #[case] expected: bool) {
+        assert_eq!(
+            has_repeating_chars(s, PASSWORD_MAX_REPEATING_CHARS + 1),
+            expected
+        );
     }
 }

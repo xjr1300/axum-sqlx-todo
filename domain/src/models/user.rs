@@ -29,6 +29,7 @@ impl_string_primitive!(GivenName);
 #[derive(Debug, Clone, garde::Validate)]
 pub struct Email(#[garde(email)] pub String);
 impl_string_primitive!(Email);
+
 /// PHC文字列
 ///
 /// PHC(Password Hashing Competition)文字列は、パスワードのハッシュを表現するための標準形式である。

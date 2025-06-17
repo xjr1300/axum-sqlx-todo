@@ -307,6 +307,26 @@ impl TestCase {
         let uri = format!("{}/todos/{}", self.origin(), todo_id);
         self.http_client.delete(&uri).send().await.unwrap()
     }
+
+    pub async fn role_list(&self) -> reqwest::Response {
+        let uri = format!("{}/roles", self.origin());
+        self.http_client.get(&uri).send().await.unwrap()
+    }
+
+    pub async fn role_by_code(&self, code: i16) -> reqwest::Response {
+        let uri = format!("{}/roles/{}", self.origin(), code);
+        self.http_client.get(&uri).send().await.unwrap()
+    }
+
+    pub async fn todo_status_list(&self) -> reqwest::Response {
+        let uri = format!("{}/todo-statuses", self.origin());
+        self.http_client.get(&uri).send().await.unwrap()
+    }
+
+    pub async fn todo_status_by_code(&self, code: i16) -> reqwest::Response {
+        let uri = format!("{}/todo-statuses/{}", self.origin(), code);
+        self.http_client.get(&uri).send().await.unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

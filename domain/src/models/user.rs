@@ -1,3 +1,4 @@
+use enum_display::EnumDisplay;
 use garde::Validate as _;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -114,7 +115,10 @@ pub struct LoginFailedHistory {
 }
 
 /// ロールコード
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, EnumDisplay, Serialize_repr, Deserialize_repr,
+)]
+#[enum_display(case = "Snake")]
 #[repr(i16)]
 pub enum RoleCode {
     Admin = 1,
@@ -133,6 +137,24 @@ impl TryFrom<i16> for RoleCode {
                 "Invalid role code",
             )),
         }
+    }
+}
+
+impl sqlx::Encode<'_, sqlx::Postgres> for RoleCode {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let code = *self as i16;
+        buf.extend(code.to_be_bytes());
+        Ok(sqlx::encode::IsNull::No)
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for RoleCode {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        // OID 21 is the OID for `int2` in PostgreSQL, which corresponds to i16
+        sqlx::postgres::PgTypeInfo::with_oid(sqlx::postgres::types::Oid(21))
     }
 }
 

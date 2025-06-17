@@ -1,6 +1,8 @@
+mod lookup;
 mod todo;
 mod user;
 
+pub use lookup::*;
 pub use todo::*;
 pub use user::*;
 

@@ -1,3 +1,4 @@
+pub mod lookup;
 pub mod todo;
 pub mod user;
 
@@ -20,12 +21,15 @@ type UserUseCaseImpl = UserUseCase<PgUserRepository, RedisTokenRepository>;
 fn user_use_case(app_state: &AppState) -> UserUseCaseImpl {
     let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
     let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    UserUseCase::new(user_repo, token_repo)
+    UserUseCase {
+        user_repo,
+        token_repo,
+    }
 }
 
 type TodoUseCaseImpl = TodoUseCase<PgTodoRepository>;
 
 fn todo_use_case(app_state: &AppState) -> TodoUseCaseImpl {
     let todo_repo = PgTodoRepository::new(app_state.pg_pool.clone());
-    TodoUseCase::new(todo_repo)
+    TodoUseCase { todo_repo }
 }

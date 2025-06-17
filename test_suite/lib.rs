@@ -1,4 +1,5 @@
 mod helpers;
+mod lookup;
 mod test_case;
 mod todo;
 mod user;

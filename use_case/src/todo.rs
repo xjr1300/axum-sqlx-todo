@@ -17,10 +17,6 @@ impl<R> TodoUseCase<R>
 where
     R: TodoRepository,
 {
-    pub fn new(todo_repo: R) -> Self {
-        Self { todo_repo }
-    }
-
     /// ユーザーのTodoリストを返す。
     pub async fn list(&self, input: TodoListInput) -> DomainResult<Vec<Todo>> {
         self.todo_repo.list(input).await

@@ -23,14 +23,6 @@ where
     UR: UserRepository,
     TR: TokenRepository,
 {
-    /// ユーザー用ユースケースを作成する。
-    pub fn new(user_repo: UR, token_repo: TR) -> Self {
-        Self {
-            user_repo,
-            token_repo,
-        }
-    }
-
     /// ユーザーをサインアップする。
     pub async fn sign_up(
         &self,

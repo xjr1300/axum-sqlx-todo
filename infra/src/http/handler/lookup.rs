@@ -13,6 +13,7 @@ pub mod role {
 
     use crate::postgres::repositories::PgRoleRepository;
 
+    #[tracing::instrument(skip(app_state))]
     pub async fn list(State(app_state): State<AppState>) -> ApiResult<Json<Vec<Role>>> {
         let pool = app_state.pg_pool.clone();
         let repo = PgRoleRepository { pool };
@@ -20,6 +21,7 @@ pub mod role {
         Ok(Json(use_case.list().await.map_err(ApiError::from)?))
     }
 
+    #[tracing::instrument(skip(app_state))]
     pub async fn by_code(
         State(app_state): State<AppState>,
         code: axum::extract::Path<i16>,
@@ -41,6 +43,7 @@ pub mod todo_status {
 
     use crate::postgres::repositories::PgTodoStatusRepository;
 
+    #[tracing::instrument(skip(app_state))]
     pub async fn list(State(app_state): State<AppState>) -> ApiResult<Json<Vec<TodoStatus>>> {
         let pool = app_state.pg_pool.clone();
         let repo = PgTodoStatusRepository { pool };
@@ -48,6 +51,7 @@ pub mod todo_status {
         Ok(Json(use_case.list().await.map_err(ApiError::from)?))
     }
 
+    #[tracing::instrument(skip(app_state))]
     pub async fn by_code(
         State(app_state): State<AppState>,
         code: axum::extract::Path<i16>,

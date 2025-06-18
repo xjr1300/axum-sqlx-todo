@@ -11,6 +11,7 @@ use super::primitives::Id;
 use crate::{
     DomainError, DomainErrorKind, DomainResult, domain_error, impl_string_primitive,
     models::primitives::{Description, DisplayOrder},
+    sqlx_encode_value,
 };
 
 /// ユーザーID
@@ -140,23 +141,8 @@ impl TryFrom<i16> for RoleCode {
     }
 }
 
-impl sqlx::Encode<'_, sqlx::Postgres> for RoleCode {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let code = *self as i16;
-        buf.extend(code.to_be_bytes());
-        Ok(sqlx::encode::IsNull::No)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for RoleCode {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        // OID 21 is the OID for `int2` in PostgreSQL, which corresponds to i16
-        sqlx::postgres::PgTypeInfo::with_oid(sqlx::postgres::types::Oid(21))
-    }
-}
+// OID 21 is the OID for `int2` in PostgreSQL, which corresponds to i16
+sqlx_encode_value!(RoleCode, i16, 21);
 
 /// ロール名
 #[derive(Debug, Clone, garde::Validate)]

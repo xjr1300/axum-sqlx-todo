@@ -11,7 +11,10 @@ use utils::serde::{
 
 use crate::models::primitives::{Description, DisplayOrder, Id};
 use crate::models::user::User;
-use crate::{DomainError, DomainErrorKind, DomainResult, domain_error, impl_string_primitive};
+use crate::{
+    DomainError, DomainErrorKind, DomainResult, domain_error, impl_string_primitive,
+    sqlx_encode_value,
+};
 
 /// Todo ID
 pub type TodoId = Id<Todo>;
@@ -63,23 +66,8 @@ impl TryFrom<i16> for TodoStatusCode {
     }
 }
 
-impl sqlx::Encode<'_, sqlx::Postgres> for TodoStatusCode {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let code = *self as i16;
-        buf.extend(code.to_be_bytes());
-        Ok(sqlx::encode::IsNull::No)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for TodoStatusCode {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        // OID 21 is the OID for `int2` in PostgreSQL, which corresponds to i16
-        sqlx::postgres::PgTypeInfo::with_oid(sqlx::postgres::types::Oid(21))
-    }
-}
+// OID 21 is the OID for `int2` in PostgreSQL, which corresponds to i16
+sqlx_encode_value!(TodoStatusCode, i16, 21);
 
 /// 完了可能なTodo状態のコード
 pub const COMPLETABLE_TODO_STATUS_CODES: [TodoStatusCode; 2] =

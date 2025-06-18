@@ -12,50 +12,65 @@ use domain::{
 
 use crate::postgres::repositories::repository_error;
 
-pub struct PgRoleRepository {
-    pub pool: PgPool,
+macro_rules! pg_lookup_repository {
+    ($name:ident, $entity:ty, $code:ty, $code_ty: ty, $row:ty, $table:literal) => {
+        pub struct $name {
+            pub pool: PgPool,
+        }
+
+        #[async_trait::async_trait]
+        impl LookupRepository for $name {
+            type Entity = $entity;
+            type Code = $code;
+
+            async fn list(&self) -> DomainResult<Vec<Self::Entity>> {
+                sqlx::query_as::<_, $row>(&format!(
+                    r#"
+                    SELECT code, name, description, display_order, created_at, updated_at
+                    FROM {}
+                    ORDER BY display_order
+                    "#,
+                    $table
+                ))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(repository_error)?
+                .into_iter()
+                .map(<$entity>::try_from)
+                .collect::<Result<Vec<_>, _>>()
+            }
+
+            async fn by_code(&self, code: &Self::Code) -> DomainResult<Option<Self::Entity>> {
+                sqlx::query_as::<_, $row>(&format!(
+                    r#"
+                    SELECT code, name, description, display_order, created_at, updated_at
+                    FROM {}
+                    WHERE code = $1
+                    "#,
+                    $table
+                ))
+                .bind(*code as $code_ty)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(repository_error)?
+                .map(<$entity>::try_from)
+                .transpose()
+            }
+        }
+    };
 }
 
-#[async_trait::async_trait]
-impl LookupRepository for PgRoleRepository {
-    type Entity = Role;
-    type Code = RoleCode;
+pg_lookup_repository!(PgRoleRepository, Role, RoleCode, i16, RoleRow, "roles");
+pg_lookup_repository!(
+    PgTodoStatusRepository,
+    TodoStatus,
+    TodoStatusCode,
+    i16,
+    TodoStatusRow,
+    "todo_statuses"
+);
 
-    async fn list(&self) -> DomainResult<Vec<Self::Entity>> {
-        sqlx::query_as!(
-            RoleRow,
-            r#"
-            SELECT code, name, description, display_order, created_at, updated_at
-            FROM roles
-            ORDER BY display_order
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(repository_error)?
-        .into_iter()
-        .map(Role::try_from)
-        .collect::<Result<Vec<_>, _>>()
-    }
-
-    async fn by_code(&self, code: &Self::Code) -> DomainResult<Option<Self::Entity>> {
-        sqlx::query_as!(
-            RoleRow,
-            r#"
-            SELECT code, name, description, display_order, created_at, updated_at
-            FROM roles
-            WHERE code = $1
-            "#,
-            *code as i16
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(repository_error)?
-        .map(Role::try_from)
-        .transpose()
-    }
-}
-
+#[derive(Debug, sqlx::FromRow)]
 struct RoleRow {
     code: i16,
     name: String,
@@ -80,50 +95,7 @@ impl TryFrom<RoleRow> for Role {
     }
 }
 
-pub struct PgTodoStatusRepository {
-    pub pool: PgPool,
-}
-
-#[async_trait::async_trait]
-impl LookupRepository for PgTodoStatusRepository {
-    type Entity = TodoStatus;
-    type Code = TodoStatusCode;
-
-    async fn list(&self) -> DomainResult<Vec<Self::Entity>> {
-        sqlx::query_as!(
-            TodoStatusRow,
-            r#"
-            SELECT code, name, description, display_order, created_at, updated_at
-            FROM todo_statuses
-            ORDER BY display_order
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(repository_error)?
-        .into_iter()
-        .map(TodoStatus::try_from)
-        .collect::<Result<Vec<_>, _>>()
-    }
-
-    async fn by_code(&self, code: &Self::Code) -> DomainResult<Option<Self::Entity>> {
-        sqlx::query_as!(
-            TodoStatusRow,
-            r#"
-            SELECT code, name, description, display_order, created_at, updated_at
-            FROM todo_statuses
-            WHERE code = $1
-            "#,
-            *code as i16
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(repository_error)?
-        .map(TodoStatus::try_from)
-        .transpose()
-    }
-}
-
+#[derive(Debug, sqlx::FromRow)]
 struct TodoStatusRow {
     code: i16,
     name: String,

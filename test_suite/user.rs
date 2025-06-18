@@ -24,7 +24,7 @@ use crate::{
 /// Check that a user can register, log in, retrieve their information, and log out successfully.
 #[tokio::test]
 #[ignore]
-async fn user_integration_test() {
+async fn user_use_case_test() {
     let app_settings = load_app_settings_for_testing();
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::No).await;
 
@@ -104,14 +104,14 @@ async fn user_integration_test() {
     // Check that the access and refresh tokens are stored in postgres
     let access_key = generate_auth_token_info_key(&access_token);
     let refresh_key = generate_auth_token_info_key(&refresh_token);
-    let user_tokens = test_case.user_tokens_from_user_repo(user.id).await;
+    let user_token_keys = test_case.user_tokens_from_user_repo(user.id).await;
     assert!(
-        user_tokens
+        user_token_keys
             .iter()
             .any(|ut| ut.token_key.expose_secret() == access_key.expose_secret())
     );
     assert!(
-        user_tokens
+        user_token_keys
             .iter()
             .any(|ut| ut.token_key.expose_secret() == refresh_key.expose_secret())
     );
@@ -153,6 +153,9 @@ async fn user_integration_test() {
         body,
     } = split_response(response).await;
     assert_eq!(status_code, StatusCode::NO_CONTENT);
+    assert!(body.is_empty());
+
+    // Check that the access and refresh tokens in cookies are deleted
     let set_cookie_values = headers.get_all(reqwest::header::SET_COOKIE);
     let mut set_cookies: HashMap<String, Cookie> = HashMap::new();
     for value in set_cookie_values {
@@ -160,6 +163,7 @@ async fn user_integration_test() {
         set_cookies.insert(cookie.name().to_string(), cookie);
     }
     let access_cookie = set_cookies.get(COOKIE_ACCESS_TOKEN_KEY).unwrap();
+    assert_eq!(access_cookie.value(), "");
     inspect_token_cookie_spec(
         access_cookie,
         SameSite::Strict,
@@ -168,6 +172,7 @@ async fn user_integration_test() {
         0,
     );
     let refresh_cookie = set_cookies.get(COOKIE_REFRESH_TOKEN_KEY).unwrap();
+    assert_eq!(refresh_cookie.value(), "");
     inspect_token_cookie_spec(
         refresh_cookie,
         SameSite::Strict,
@@ -175,12 +180,17 @@ async fn user_integration_test() {
         true,
         0,
     );
-    assert!(body.is_empty());
-    let user_tokens = test_case.user_tokens_from_user_repo(user.id).await;
+
+    // Check that the access and refresh tokens are deleted from postgres
     assert!(
-        user_tokens.is_empty(),
+        test_case
+            .user_tokens_from_user_repo(user.id)
+            .await
+            .is_empty(),
         "User tokens should be deleted after logout"
     );
+
+    // Check that the access and refresh tokens are deleted from redis
     assert!(
         test_case
             .token_content_from_token_repo(&access_token)

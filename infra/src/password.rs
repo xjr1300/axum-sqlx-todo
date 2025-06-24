@@ -68,6 +68,20 @@ impl RawPassword {
                 source: anyhow::anyhow!(message),
             });
         }
+        // 入力されたパスワードから数字とアルファベットを削除して、残りがシンボルのみか確認
+        let symbols = remove_digits_and_alphabets(&value);
+        if !symbols.chars().all(|ch| settings.symbols.contains(ch)) {
+            let message = format!(
+                "Symbols in password should be included in '{}'",
+                settings.symbols
+            );
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.clone().into()],
+                source: anyhow::anyhow!(message),
+            });
+        }
+
         // 文字の出現回数を確認して、同じ文字が指定された数以上ないか確認
         let mut number_of_chars: HashMap<char, u64> = HashMap::new();
         value.chars().for_each(|ch| {
@@ -87,10 +101,15 @@ impl RawPassword {
         }
         // 文字が連続して出現する回数を確認
         if has_repeating_chars(&value, settings.max_repeated_chars + 1) {
-            return Err(domain_error(
-                DomainErrorKind::Validation,
-                "The password can't contain the same character repeated more than twice",
-            ));
+            let message = format!(
+                "The password can't contain the same character repeated more than {} times",
+                settings.max_repeated_chars
+            );
+            return Err(DomainError {
+                kind: DomainErrorKind::Validation,
+                messages: vec![message.clone().into()],
+                source: anyhow::anyhow!(message),
+            });
         }
         Ok(Self(SecretString::new(value.into())))
     }
@@ -197,6 +216,13 @@ fn sprinkle_pepper(pepper: &SecretString, raw_password: &RawPassword) -> SecretS
     SecretString::new(peppered_password.into())
 }
 
+/// 文字列から数字とアルファベットを削除する。
+fn remove_digits_and_alphabets(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_ascii_digit() && !c.is_ascii_alphabetic())
+        .collect()
+}
+
 /// 同じ文字が指定された数以上連続して出現するかどうかを確認する。
 fn has_repeating_chars(s: &str, max_repeats: u8) -> bool {
     use fancy_regex::Regex;
@@ -241,7 +267,9 @@ mod tests {
     #[case("VALID1@PASSWORD", "lowercase")]
     #[case("Valid#@Password", "digit")]
     #[case("Valid12Password", "symbol")]
+    #[case("Valid12 Password", "symbol")]
     #[case("Valid1@Passwordss", "identical")]
+    #[case("Valid1@Passsword ", "repeated")]
     fn test_raw_password_fail(#[case] password: &str, #[case] message: &str) -> anyhow::Result<()> {
         let settings = password_settings();
         let result = RawPassword::new(&settings, SecretString::new(password.into()));
@@ -252,6 +280,15 @@ mod tests {
             panic!("Expected DomainError::Validation");
         }
         Ok(())
+    }
+
+    #[rstest::rstest]
+    #[case("abcAbc123!@#", "!@#")]
+    #[case("abcAbc123", "")]
+    #[case("!@#$", "!@#$")]
+    fn test_remove_digits_and_alphabets(#[case] s: &str, #[case] expected: &str) {
+        let result = remove_digits_and_alphabets(s);
+        assert_eq!(result, expected);
     }
 
     #[rstest::rstest]

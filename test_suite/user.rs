@@ -227,7 +227,7 @@ async fn user_can_not_login_with_invalid_credentials() {
     );
     let response = test_case.login(request_body).await;
     let history = test_case.get_login_failed_history(user.id).await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // No login failed history should be recorded if the email address is incorrect
     assert!(history.is_none());
 
@@ -235,7 +235,7 @@ async fn user_can_not_login_with_invalid_credentials() {
     let attempted_at = OffsetDateTime::now_utc();
     let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // A login failed history should be recorded if the email address is correct but the password is incorrect
     assert_eq!(history.number_of_attempts, 1);
     assert!((history.attempted_at - attempted_at).abs() < REQUEST_TIMEOUT);
@@ -271,7 +271,7 @@ async fn user_is_not_locked_after_user_attempts_to_login_in_max_attempt_times() 
     for times in 0..test_case.app_state.app_settings.login.max_attempts {
         let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert_eq!(history.number_of_attempts, times + 1);
     }
     // Check that the user is still active
@@ -299,7 +299,7 @@ async fn user_is_locked_after_use_attempts_to_login_exceeding_max_attempts() {
     for times in 0..=test_case.app_state.app_settings.login.max_attempts {
         let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert_eq!(history.number_of_attempts, times + 1);
     }
     // Check that the user is locked
@@ -330,7 +330,7 @@ async fn user_can_login_after_user_attempts_to_login_in_max_attempt_times() {
     // Attempt to log in with an incorrect password
     let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert_eq!(history.number_of_attempts, 1);
     // Wait for the maximum login attempts seconds
     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -356,7 +356,7 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
     for times in 0..test_case.app_state.app_settings.login.max_attempts {
         let response = test_case.login(john_incorrect_credential()).await;
         let history = test_case.get_login_failed_history(user.id).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert_eq!(history.number_of_attempts, times + 1);
     }
     // Wait for the maximum login attempts seconds
@@ -366,7 +366,7 @@ async fn user_login_failed_history_is_reset_after_max_attempt_time() {
     let requested_at = OffsetDateTime::now_utc();
     let response = test_case.login(john_incorrect_credential()).await;
     let history = test_case.get_login_failed_history(user.id).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let duration = history.attempted_at - requested_at;
     assert!(duration < Duration::seconds(1));
     assert_eq!(history.number_of_attempts, 1);

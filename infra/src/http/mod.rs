@@ -70,7 +70,7 @@ const LOGIN_FAILED_MESSAGE: &str = "Login failed. Please check your email and pa
 
 pub fn login_failed() -> ApiError {
     ApiError {
-        status_code: StatusCode::UNAUTHORIZED,
+        status_code: StatusCode::BAD_REQUEST,
         messages: vec![LOGIN_FAILED_MESSAGE.into()],
     }
 }

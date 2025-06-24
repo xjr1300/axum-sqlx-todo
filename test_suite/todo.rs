@@ -3,6 +3,7 @@ use time::{
     OffsetDateTime,
     macros::{date, datetime},
 };
+use utils::time::DATE_FORMAT;
 use uuid::Uuid;
 
 use domain::models::{Todo, TodoStatusCode};
@@ -344,14 +345,16 @@ async fn create_todo_with_due_date() {
     let test_case = TestCase::begin(app_settings, EnableTracing::No, InsertTestData::Yes).await;
 
     test_case.login_taro().await;
-    let request_body = String::from(
+    let due_date = OffsetDateTime::now_utc().date() + time::Duration::days(7);
+    let request_body = format!(
         r#"
-        {
+        {{
             "title": "Rustの学習",
             "description": "Rustの非同期処理を学ぶ",
-            "dueDate": "2025-06-20"
-        }
+            "dueDate": "{}"
+        }}
         "#,
+        due_date.format(&DATE_FORMAT).unwrap()
     );
     let response = test_case.todo_create(request_body).await;
     let ResponseParts {
@@ -366,7 +369,7 @@ async fn create_todo_with_due_date() {
         &"Rustの非同期処理を学ぶ"
     );
     assert_eq!(todo.status.code, TodoStatusCode::NotStarted);
-    assert_eq!(todo.due_date, Some(date!(2025 - 06 - 20)));
+    assert_eq!(todo.due_date, Some(due_date));
     assert_eq!(todo.completed_at, None);
 
     test_case.end().await;

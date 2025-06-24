@@ -67,14 +67,14 @@ pub async fn login(
     let settings = &app_state.app_settings;
     let user_repo = PgUserRepository::new(app_state.pg_pool.clone());
     let token_repo = RedisTokenRepository::new(app_state.redis_pool.clone());
-    // Eメールアドレスからユーザーを取得
+    // Eメールアドレスからユーザーを取得して、取得できなかった場合は400 Bad Requestを返す
     let email = Email::new(body.email).map_err(|_| bad_request("Invalid email address".into()))?;
     let user = user_repo
         .by_email(&email)
         .await
         .map_err(internal_server_error)?
         .ok_or_else(login_failed)?;
-    // ユーザーのアクティブフラグを確認
+    // ユーザーのアクティブフラグを確認して、無効な場合は423 Lockedを返す
     if !user.active {
         return Err(user_locked());
     }
@@ -89,7 +89,6 @@ pub async fn login(
     if verify_password(&raw_password, &settings.password.pepper, &hashed_password)
         .map_err(internal_server_error)?
     {
-        tracing::debug!("Password is correct: {}", user.email);
         generate_tokens_response(settings, user_repo, token_repo, user.id, requested_at).await
     } else {
         handle_password_unmatched(settings, user_repo, user.id, requested_at).await

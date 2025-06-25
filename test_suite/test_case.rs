@@ -136,7 +136,7 @@ impl TestCase {
 
     pub fn origin(&self) -> String {
         format!(
-            "{}://{}:{}",
+            "{}://{}:{}/api/v1",
             self.app_state.app_settings.http.protocol,
             self.app_state.app_settings.http.host,
             self.app_state.app_settings.http.port,

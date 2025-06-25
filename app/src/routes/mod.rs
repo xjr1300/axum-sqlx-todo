@@ -42,7 +42,7 @@ pub fn create_router(app_state: AppState) -> Router {
         ])
         .allow_credentials(true);
 
-    axum::Router::new()
+    let routes = axum::Router::new()
         .route("/health-check", get(health_check))
         .nest("/users", create_user_routes(app_state.clone()))
         .nest("/todos", create_todo_routes(app_state.clone()))
@@ -50,7 +50,10 @@ pub fn create_router(app_state: AppState) -> Router {
         .nest(
             "/todo-statuses",
             create_todo_status_routes(app_state.clone()),
-        )
+        );
+
+    Router::new()
+        .nest("/api/v1", routes)
         .layer(cors)
         .with_state(app_state)
 }

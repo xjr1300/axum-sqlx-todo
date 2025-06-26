@@ -54,6 +54,10 @@ Todoは、次の状態で管理されます。
 
 ## API
 
+APIのエンドポイントのルートは、`/api/v1`です。
+
+それぞれのAPIは、このエンドポイントルートの末尾に、それぞれのAPIのパスを追加したURIにリクエストしてください。
+
 ### APIエラー
 
 APIの呼び出しに失敗した場合、失敗した原因を示したメッセージを配列で返します。
@@ -72,7 +76,7 @@ APIの呼び出しに失敗した場合、失敗した原因を示したメッ�
 
 サービスにユーザーを登録します。
 
-- エンドポイント: `/users/sign-up`
+- パス: `/users/sign-up`
 - `Content-Type`: `application/json`
 - メソッド: `POST`
 - リクエストボディ:
@@ -134,7 +138,7 @@ APIの呼び出しに失敗した場合、失敗した原因を示したメッ�
 サービスにログインします。
 ログインに成功すると、アクセストークンとリフレッシュトークンをHTTPレスポンスのヘッダに`Set-Cookie`として設定するとともに、レスポンスボディで返します。
 
-- エンドポイント: `/users/login`
+- パス: `/users/login`
 - `Content-Type`: `application/json`
 - メソッド: `POST`
 - リクエストボディ:
@@ -188,7 +192,7 @@ Authorization: Bearer <アクセストークン>
 ログインしているユーザーの情報を取得します。
 
 - アクセス保護: あり
-- エンドポイント: `/users/me`
+- パス: `/users/me`
 - メソッド: `GET`
 
 成功した場合、`200 OK`を返します。
@@ -200,7 +204,7 @@ Authorization: Bearer <アクセストークン>
 ログインしているユーザーの情報を更新します。
 
 - アクセス保護: あり
-- エンドポイント: `/users/me`
+- パス: `/users/me`
 - メソッド: `PATCH`
 - リクエストボディ:
   - `familyName`: ユーザーの苗字、オプション
@@ -226,7 +230,7 @@ Authorization: Bearer <アクセストークン>
 トークンのリフレッシュに成功すると、新しいアクセストークンとリフレッシュトークンをHTTPレスポンスのヘッダに`Set-Cookie`として設定するとともに、レスポンスボディで返します。
 
 - アクセス保護: あり
-- エンドポイント: `/users/refresh-tokens`
+- パス: `/users/refresh-tokens`
 - メソッド: `POST`
 - リクエストボディ:
   - `refreshToken`: リフレッシュトークン、オプション
@@ -248,7 +252,7 @@ Authorization: Bearer <アクセストークン>
 本サービスからログアウトして、アクセストークンとリフレッシュトークンを管理するクッキーを無効化します。
 
 - アクセス保護: あり
-- エンドポイント: `/users/logout`
+- パス: `/users/logout`
 - メソッド: `POST`
 
 成功した場合、`204 No Content`を返します。
@@ -264,7 +268,7 @@ Authorization: Bearer <アクセストークン>
 ログインしているユーザーのTodoリストを取得します。
 
 - アクセス保護: あり
-- エンドポイント: `/todos`
+- パス: `/todos`
 - メソッド: `GET`
 
 成功した場合、`200 OK`を返します。
@@ -353,7 +357,7 @@ Authorization: Bearer <アクセストークン>
 TodoのIDを指定して、Todoを取得します。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}`
+- パス: `/todos/{todo_id}`
 - パスパラメータ:
   - `id`: TodoのID
 - メソッド: `GET`
@@ -435,7 +439,7 @@ TodoのIDを指定して、Todoを取得します。
 作成されたTodoの状態は、未着手です。
 
 - アクセス保護: あり
-- エンドポイント: `/todos`
+- パス: `/todos`
 - `Content-Type`: `application/json`
 - メソッド: `POST`
 - リクエストボディ:
@@ -464,7 +468,7 @@ TodoのIDを指定して、Todoを取得します。
 - 完了しているTodo、アーカイブされているTodoは更新できません。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}`
+- パス: `/todos/{todo_id}`
 - パスパラメータ:
   - `id`: TodoのID
 - `Content-Type`: `application/json`
@@ -498,7 +502,7 @@ TodoのIDを指定して、Todoを取得します。
 Todoを完了すると、自動的にTodoの状態が完了に更新され、`completedAt`に完了日時が設定されます。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}/complete`
+- パス: `/todos/{todo_id}/complete`
 - パスパラメータ:
   - `id`: TodoのID
 - メソッド: `POST`
@@ -513,7 +517,7 @@ Todoを完了すると、自動的にTodoの状態が完了に更新され、`co
 Todoを再オープンすると、Todoの状態が更新され、`completedAt`が`null`に設定されます。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}/reopen`
+- パス: `/todos/{todo_id}/reopen`
 - パスパラメータ:
   - `id`: TodoのID
 - `Content-Type`: `application/json`
@@ -542,7 +546,7 @@ Todoを再オープンすると、Todoの状態が更新され、`completedAt`�
 ログインしているユーザーのTodoをアーカイブ、またはアーカイブ解除してアクティブにします。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}/archive`
+- パス: `/todos/{todo_id}/archive`
 - パスパラメータ:
   - `id`: TodoのID
 - `Content-Type`: `application/json`
@@ -566,7 +570,7 @@ Todoを再オープンすると、Todoの状態が更新され、`completedAt`�
 ログインしているユーザーのTodoを削除します。
 
 - アクセス保護: あり
-- エンドポイント: `/todos/{todo_id}`
+- パス: `/todos/{todo_id}`
 - パスパラメータ:
   - `id`: TodoのID
 - メソッド: `DELETE`
@@ -580,7 +584,7 @@ Todoを再オープンすると、Todoの状態が更新され、`completedAt`�
 #### ロールリストの取得
 
 - アクセス保護: あり
-- エンドポイント: `/roles`
+- パス: `/roles`
 - メソッド: `GET`
 
 成功した場合、`200 OK`を返します。
@@ -611,7 +615,7 @@ Todoを再オープンすると、Todoの状態が更新され、`completedAt`�
 #### ロールの取得
 
 - アクセス保護: あり
-- エンドポイント: `/roles/<code>`
+- パス: `/roles/<code>`
 - メソッド: `GET`
 
 成功した場合、`200 OK`を返します。

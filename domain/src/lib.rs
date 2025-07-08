@@ -108,7 +108,7 @@ impl FromStr for NumericOperator {
             "lte" => Ok(NumericOperator::Lte),
             "between" => Ok(NumericOperator::Between),
             "not_between" => Ok(NumericOperator::NotBetween),
-            _ => Err(format!("Unknown numeric operator: {}", s)),
+            _ => Err(format!("Unknown numeric operator: {s}")),
         }
     }
 }

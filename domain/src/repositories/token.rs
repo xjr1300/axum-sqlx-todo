@@ -68,7 +68,7 @@ impl TryFrom<&str> for TokenType {
             "access" => Ok(Self::Access),
             "refresh" => Ok(Self::Refresh),
             _ => {
-                let messages = format!("{} is not a valid token type", value);
+                let messages = format!("{value} is not a valid token type");
                 Err(DomainError {
                     kind: DomainErrorKind::Validation,
                     messages: vec![messages.clone().into()],
@@ -160,7 +160,7 @@ mod tests {
     fn generate_auth_token_info_value_ok() -> anyhow::Result<()> {
         let user_id = UserId::default();
         let token_type = TokenType::Access;
-        let expected = format!("{}:{}", user_id, token_type);
+        let expected = format!("{user_id}:{token_type}");
         let actual = generate_auth_token_info_value(user_id, token_type);
         assert_eq!(expected, actual);
         Ok(())
@@ -171,7 +171,7 @@ mod tests {
     fn divide_auth_token_info_ok() -> anyhow::Result<()> {
         let expected_user_id = UserId::default();
         let expected_token_type = TokenType::Refresh;
-        let input = format!("{}:{}", expected_user_id, expected_token_type);
+        let input = format!("{expected_user_id}:{expected_token_type}");
         let (user_id, token_type) = divide_auth_token_info(&input)?;
         assert_eq!(expected_user_id, user_id);
         assert_eq!(expected_token_type, token_type);
